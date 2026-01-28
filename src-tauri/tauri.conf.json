@@ -1,0 +1,75 @@
+{
+  "$schema": "https://raw.githubusercontent.com/niclas-nickleback/tauri/v2/crates/tauri-utils/schema.json",
+  "productName": "LingoSnap",
+  "version": "1.0.0",
+  "identifier": "com.lingosnap.app",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "LingoSnap Settings",
+        "width": 500,
+        "height": 600,
+        "visible": false,
+        "center": true,
+        "resizable": false
+      },
+      {
+        "label": "popup",
+        "title": "LingoSnap",
+        "width": 500,
+        "height": 400,
+        "visible": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "transparent": true,
+        "x": 100,
+        "y": 100
+      },
+      {
+        "label": "history",
+        "title": "Translation History",
+        "width": 600,
+        "height": 500,
+        "visible": false,
+        "center": true
+      },
+      {
+        "label": "indicator",
+        "title": "LingoSnap",
+        "width": 56,
+        "height": 56,
+        "visible": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "transparent": true,
+        "x": 20,
+        "y": 300
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "tooltip": "LingoSnap - Ctrl+Shift+C ile çevir"
+    },
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

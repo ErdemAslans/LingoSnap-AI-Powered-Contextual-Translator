@@ -1,0 +1,92 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+
+# Tauri build outputs
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/icons/*.ico.bak
+
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# API Keys and secrets - CRITICAL: Never commit
+*.pem
+*.key
+secrets.json
+credentials.json
+
+# Tauri store (contains user settings including API key)
+# This is stored in app data, but just in case
+store.json
+settings.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Debug
+debug/
+*.dmp
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Package manager locks (optional - uncomment if you want to ignore)
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
+
+# Rust specific
+**/*.rs.bk
+# Note: Cargo.lock is committed for reproducible builds
