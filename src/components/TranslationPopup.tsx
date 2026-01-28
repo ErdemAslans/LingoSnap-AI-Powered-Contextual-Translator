@@ -178,15 +178,19 @@ export default function TranslationPopup() {
             <div className="absolute inset-0 bg-green-500/10 animate-pulse pointer-events-none" />
           )}
 
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
+          {/* Header - Draggable */}
+          <div
+            data-tauri-drag-region
+            className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 cursor-move select-none"
+          >
+            <div className="flex items-center gap-2 pointer-events-none">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
                 <span className="text-sm font-bold text-black">L</span>
               </div>
               <span className="text-sm font-medium text-zinc-300">LingoSnap</span>
+              <span className="text-xs text-zinc-600 ml-1">• Sürükle</span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 pointer-events-auto">
               <button
                 onClick={() => setPinned(!isPinned)}
                 className={`rounded-lg p-2 transition-colors ${
