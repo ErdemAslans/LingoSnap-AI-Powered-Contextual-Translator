@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import { loadSettings, saveSettings, loadStats, saveStats } from "../services/storage";
@@ -10,6 +10,7 @@ export function useSettings() {
   const setSettings = useAppStore((s) => s.setSettings);
   const loadSettingsToStore = useAppStore((s) => s.loadSettings);
   const loadStatsToStore = useAppStore((s) => s.loadStats);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     // Load settings and stats on mount
@@ -17,6 +18,7 @@ export function useSettings() {
       loadSettingsToStore(loaded);
       // Sync auto-translate on select with backend
       invoke("set_auto_translate_on_select", { enabled: loaded.autoTranslateOnSelect });
+      setIsLoaded(true);
     });
     loadStats().then(loadStatsToStore);
   }, [loadSettingsToStore, loadStatsToStore]);
@@ -38,5 +40,5 @@ export function useSettings() {
     await saveStats(updated);
   };
 
-  return { settings, stats, updateSettings, updateStats };
+  return { settings, stats, isLoaded, updateSettings, updateStats };
 }

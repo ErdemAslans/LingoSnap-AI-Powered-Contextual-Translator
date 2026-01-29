@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "LingoSnap default capabilities",
-  "windows": ["main", "popup", "history"],
+  "windows": ["main", "popup", "history", "indicator"],
   "permissions": [
     "core:default",
     "core:window:default",

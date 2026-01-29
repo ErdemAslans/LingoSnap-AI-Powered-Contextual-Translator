@@ -232,7 +232,7 @@ function StatsCard({
 }
 
 export default function SettingsWindow() {
-  const { settings, stats, updateSettings } = useSettings();
+  const { settings, stats, isLoaded, updateSettings } = useSettings();
   const { history, search, setSearch, deleteEntry, clearAll } = useHistory();
   const [activeTab, setActiveTab] = useState<Tab>("settings");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
@@ -240,12 +240,12 @@ export default function SettingsWindow() {
   const [isStarting, setIsStarting] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Check if onboarding should be shown
+  // Check if onboarding should be shown - only after settings are loaded
   useEffect(() => {
-    if (!settings.hasCompletedOnboarding && !settings.apiKey) {
+    if (isLoaded && !settings.hasCompletedOnboarding && !settings.apiKey) {
       setShowOnboarding(true);
     }
-  }, [settings.hasCompletedOnboarding, settings.apiKey]);
+  }, [isLoaded, settings.hasCompletedOnboarding, settings.apiKey]);
 
   // Update apiKeyInput when settings load
   useEffect(() => {
@@ -277,6 +277,22 @@ export default function SettingsWindow() {
       : history;
 
   const favoriteCount = history.filter((e) => e.isFavorite).length;
+
+  // Show loading while settings are being loaded
+  if (!isLoaded) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-black">
+        <div className="flex flex-col items-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white mb-4">
+            <span className="text-2xl font-bold text-black">L</span>
+          </div>
+          <div className="h-1 w-32 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-full bg-white animate-pulse" style={{ width: "60%" }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Show onboarding for new users
   if (showOnboarding) {
