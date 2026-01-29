@@ -26,6 +26,7 @@ export interface AppSettings {
   hasCompletedOnboarding: boolean;
   showFloatingIndicator: boolean;
   autoTranslateClipboard: boolean;
+  autoTranslateOnSelect: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -42,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hasCompletedOnboarding: false,
   showFloatingIndicator: true,
   autoTranslateClipboard: false,
+  autoTranslateOnSelect: false,
 };
 
 // User statistics for motivation

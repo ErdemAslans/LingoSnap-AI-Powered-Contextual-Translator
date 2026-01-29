@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Circle,
   Clipboard,
+  MousePointer2,
 } from "lucide-react";
 
 type Tab = "settings" | "history";
@@ -523,6 +524,33 @@ export default function SettingsWindow() {
                       <div
                         className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
                           settings.autoTranslateClipboard ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => updateSettings({ autoTranslateOnSelect: !settings.autoTranslateOnSelect })}
+                    className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 hover:border-zinc-700 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <MousePointer2
+                        size={18}
+                        className={settings.autoTranslateOnSelect ? "text-green-400" : "text-zinc-500"}
+                      />
+                      <div>
+                        <span className="text-sm">Seçince Çevir</span>
+                        <p className="text-xs text-zinc-500">Mouse ile seçince otomatik çevir</p>
+                      </div>
+                    </div>
+                    <div
+                      className={`h-5 w-9 rounded-full transition-colors ${
+                        settings.autoTranslateOnSelect ? "bg-green-500" : "bg-zinc-700"
+                      }`}
+                    >
+                      <div
+                        className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                          settings.autoTranslateOnSelect ? "translate-x-4" : "translate-x-0"
                         }`}
                       />
                     </div>

@@ -1,6 +1,7 @@
 mod clipboard;
 mod commands;
 mod hotkey;
+mod mouse_hook;
 mod tray;
 mod window;
 
@@ -24,6 +25,8 @@ pub fn run() {
             commands::trigger_translate,
             commands::toggle_indicator,
             commands::is_indicator_visible,
+            commands::set_auto_translate_on_select,
+            commands::get_auto_translate_on_select,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -44,6 +47,9 @@ pub fn run() {
             if let Some(indicator) = app.get_webview_window("indicator") {
                 let _ = indicator.show();
             }
+
+            // Start mouse hook for auto-translate on select
+            mouse_hook::start_mouse_hook(&handle);
 
             Ok(())
         })

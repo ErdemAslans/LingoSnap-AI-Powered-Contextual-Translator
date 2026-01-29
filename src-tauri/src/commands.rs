@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::clipboard;
+use crate::mouse_hook;
 use crate::window;
 
 #[cfg(windows)]
@@ -113,4 +114,15 @@ pub fn is_indicator_visible(app: AppHandle) -> Result<bool, String> {
         return window.is_visible().map_err(|e| e.to_string());
     }
     Ok(false)
+}
+
+#[tauri::command]
+pub fn set_auto_translate_on_select(enabled: bool) -> Result<(), String> {
+    mouse_hook::set_auto_translate_on_select(enabled);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_auto_translate_on_select() -> Result<bool, String> {
+    Ok(mouse_hook::is_auto_translate_on_select_enabled())
 }

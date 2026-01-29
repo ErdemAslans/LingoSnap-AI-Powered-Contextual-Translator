@@ -80,5 +80,16 @@ export function useTranslation() {
     };
   }, [doTranslate]);
 
+  // Listen for auto-select-translate (mouse selection)
+  useEffect(() => {
+    const unlisten = listen("auto-select-translate", async () => {
+      // trigger_translate already simulates Ctrl+C
+      await invoke("trigger_translate");
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   return { isTranslating, currentTranslation, originalText, error, doTranslate };
 }
