@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 #[cfg(windows)]
 use winapi::shared::minwindef::{LPARAM, LRESULT, WPARAM};
@@ -102,6 +102,7 @@ pub fn start_mouse_hook(app: &AppHandle) {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn stop_mouse_hook() {
     MOUSE_HOOK_ENABLED.store(false, Ordering::Relaxed);
 }
