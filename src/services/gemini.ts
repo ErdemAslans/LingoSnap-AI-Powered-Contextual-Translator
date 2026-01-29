@@ -2,7 +2,7 @@ import type { TranslationResult } from "../types";
 
 // Groq API - Free tier with Llama models
 const API_BASE = "https://api.groq.com/openai/v1";
-const MODEL = "llama-3.1-8b-instant"; // Fast, free tier available
+const MODEL = "llama-3.3-70b-versatile"; // Latest Llama model, very capable
 
 interface GroqResponse {
   choices: Array<{
@@ -66,7 +66,20 @@ Provide ONLY the Turkish translation. No explanations, no "TRANSLATION:" prefix,
 
   if (!res.ok) {
     const errData: GroqError = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `Groq API error ${res.status}`);
+    const errorMsg = errData.error?.message || `Groq API error ${res.status}`;
+    console.error("[LingoSnap] Groq API Error:", res.status, errorMsg);
+
+    // User-friendly error messages
+    if (res.status === 401) {
+      throw new Error("API anahtarı geçersiz. Lütfen Groq Console'dan yeni bir anahtar alın.");
+    }
+    if (res.status === 429) {
+      throw new Error("Çok fazla istek. Biraz bekleyip tekrar deneyin.");
+    }
+    if (res.status === 503 || res.status === 500) {
+      throw new Error("Groq sunucusu şu an meşgul. Biraz bekleyin.");
+    }
+    throw new Error(errorMsg);
   }
 
   const data: GroqResponse = await res.json();
@@ -87,16 +100,26 @@ export async function translateText(
   apiKey: string
 ): Promise<TranslationResult> {
   if (!apiKey || apiKey.trim() === "") {
-    throw new Error("Groq API key is required. Get your free API key at https://console.groq.com/");
+    throw new Error("API key gerekli. console.groq.com'dan ücretsiz alabilirsiniz.");
   }
 
-  const { translation } = await translateWithGroq(text, apiKey);
+  try {
+    const { translation } = await translateWithGroq(text, apiKey);
 
-  return {
-    translation,
-    explanation: undefined,
-    original_context: "AI-powered translation via Groq",
-  };
+    return {
+      translation,
+      explanation: undefined,
+      original_context: "AI-powered translation via Groq",
+    };
+  } catch (error) {
+    console.error("[LingoSnap] Translation error:", error);
+
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      throw new Error("İnternet bağlantısı yok. Bağlantınızı kontrol edin.");
+    }
+
+    throw error;
+  }
 }
 
 export async function testApiKey(apiKey: string): Promise<string> {
