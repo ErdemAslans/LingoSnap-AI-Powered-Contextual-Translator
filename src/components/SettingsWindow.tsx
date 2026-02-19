@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useSettings } from "../hooks/useSettings";
 import { useHistory } from "../hooks/useHistory";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-shell";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import {
   Settings,
   History,
@@ -18,26 +19,34 @@ import {
   BellOff,
   ExternalLink,
   Check,
-  Keyboard,
   ChevronRight,
-  Circle,
-  Clipboard,
+  FolderOpen,
   MousePointer2,
 } from "lucide-react";
 
 type Tab = "settings" | "history";
 type HistoryFilter = "all" | "favorites";
 
-// Onboarding component for first-time users
 function Onboarding({
   onComplete,
 }: {
-  onComplete: (apiKey: string) => void;
+  onComplete: (apiKey: string, vaultPath: string) => void;
 }) {
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
+  const [vaultPath, setVaultPath] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState("");
+
+  const handleSelectFolder = async () => {
+    const selected = await dialogOpen({
+      directory: true,
+      title: "Bilgi Tabanı Klasörü Seç",
+    });
+    if (selected) {
+      setVaultPath(selected as string);
+    }
+  };
 
   const handleValidateAndContinue = async () => {
     if (!apiKey || apiKey.length < 10) {
@@ -47,11 +56,18 @@ function Onboarding({
     setIsValidating(true);
     setError("");
 
-    // Simple validation - just check length for now
     setTimeout(() => {
       setIsValidating(false);
-      onComplete(apiKey);
+      setStep(3);
     }, 500);
+  };
+
+  const handleFinish = () => {
+    if (!vaultPath) {
+      setError("Lütfen bir klasör seçin");
+      return;
+    }
+    onComplete(apiKey, vaultPath);
   };
 
   return (
@@ -59,7 +75,6 @@ function Onboarding({
       <div className="w-full max-w-md">
         {step === 1 && (
           <div className="text-center animate-fadeIn">
-            {/* Logo */}
             <div className="mb-8 flex justify-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-lg shadow-white/20">
                 <span className="text-4xl font-bold text-black">L</span>
@@ -68,40 +83,35 @@ function Onboarding({
 
             <h1 className="text-3xl font-bold mb-3">LingoSnap'e Hoş Geldin!</h1>
             <p className="text-zinc-400 mb-8">
-              Herhangi bir metni anında çevir. Sadece seç ve{" "}
-              <kbd className="px-2 py-1 bg-zinc-800 rounded text-xs font-mono">
-                Ctrl+Shift+C
-              </kbd>{" "}
-              tuşlarına bas.
+              Mouse ile metin seç, anında çevirsin. Öğrenme sürecini takip etsin.
             </p>
 
-            {/* Features */}
             <div className="space-y-3 mb-8 text-left">
               <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-900/50">
                 <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  <Zap className="h-5 w-5 text-blue-400" />
+                  <MousePointer2 className="h-5 w-5 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Anında Çeviri</p>
-                  <p className="text-xs text-zinc-500">Seçtiğin metin saniyeler içinde çevrilir</p>
+                  <p className="text-sm font-medium">Seç ve Çevir</p>
+                  <p className="text-xs text-zinc-500">Mouse ile metin seçince otomatik çevirir</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-900/50">
                 <div className="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                  <Volume2 className="h-5 w-5 text-purple-400" />
+                  <FolderOpen className="h-5 w-5 text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Sesli Telaffuz</p>
-                  <p className="text-xs text-zinc-500">Kelimelerin doğru telaffuzunu dinle</p>
+                  <p className="text-sm font-medium">Bilgi Tabanı</p>
+                  <p className="text-xs text-zinc-500">Çevirilerini kaydeder, bağlam oluşturur</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-900/50">
                 <div className="h-10 w-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                  <Star className="h-5 w-5 text-yellow-400" />
+                  <Zap className="h-5 w-5 text-yellow-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Favorilere Kaydet</p>
-                  <p className="text-xs text-zinc-500">Önemli çevirileri favorilere ekle</p>
+                  <p className="text-sm font-medium">Bağlamsal Çeviri</p>
+                  <p className="text-xs text-zinc-500">Önceki çevirilerden öğrenir, tutarlı çevirir</p>
                 </div>
               </div>
             </div>
@@ -131,7 +141,6 @@ function Onboarding({
               gerekiyor.
             </p>
 
-            {/* Steps */}
             <div className="space-y-4 mb-6">
               <div className="flex items-start gap-3">
                 <div className="h-6 w-6 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold shrink-0">
@@ -142,7 +151,7 @@ function Onboarding({
                     Groq Console'a gidin ve ücretsiz hesap oluşturun
                   </p>
                   <button
-                    onClick={() => open("https://console.groq.com/")}
+                    onClick={() => shellOpen("https://console.groq.com/")}
                     className="mt-1 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
                   >
                     console.groq.com
@@ -164,7 +173,6 @@ function Onboarding({
               </div>
             </div>
 
-            {/* API Key Input */}
             <div className="mb-4">
               <input
                 type="password"
@@ -184,8 +192,56 @@ function Onboarding({
               disabled={isValidating || !apiKey}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-4 text-base font-semibold text-black hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isValidating ? "Kontrol ediliyor..." : "Tamamla"}
-              {!isValidating && <Check size={18} />}
+              {isValidating ? "Kontrol ediliyor..." : "Devam"}
+              {!isValidating && <ChevronRight size={18} />}
+            </button>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="animate-fadeIn">
+            <button
+              onClick={() => setStep(2)}
+              className="mb-6 text-sm text-zinc-500 hover:text-white transition-colors"
+            >
+              ← Geri
+            </button>
+
+            <h2 className="text-2xl font-bold mb-2">Bilgi Tabanı Klasörü</h2>
+            <p className="text-zinc-400 mb-6">
+              Çevirilerini nereye kaydetmek istersin? Bu klasör senin kişisel bilgi tabanın olacak.
+              Obsidian gibi not uygulamalarıyla da kullanabilirsin.
+            </p>
+
+            <button
+              onClick={handleSelectFolder}
+              className="w-full flex items-center gap-3 rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-900/50 px-4 py-6 hover:border-zinc-500 transition-colors mb-4"
+            >
+              <FolderOpen size={24} className="text-zinc-400" />
+              <div className="text-left flex-1 min-w-0">
+                {vaultPath ? (
+                  <>
+                    <p className="text-sm font-medium text-white truncate">{vaultPath}</p>
+                    <p className="text-xs text-green-400">Klasör seçildi</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-zinc-300">Klasör Seç</p>
+                    <p className="text-xs text-zinc-500">Çeviriler buraya kaydedilecek</p>
+                  </>
+                )}
+              </div>
+            </button>
+
+            {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+
+            <button
+              onClick={handleFinish}
+              disabled={!vaultPath}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-4 text-base font-semibold text-black hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Tamamla
+              <Check size={18} />
             </button>
           </div>
         )}
@@ -204,7 +260,6 @@ function Onboarding({
   );
 }
 
-// Stats card component
 function StatsCard({
   icon: Icon,
   label,
@@ -240,25 +295,34 @@ export default function SettingsWindow() {
   const [isStarting, setIsStarting] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Check if onboarding should be shown - only after settings are loaded
   useEffect(() => {
     if (isLoaded && !settings.hasCompletedOnboarding && !settings.apiKey) {
       setShowOnboarding(true);
     }
   }, [isLoaded, settings.hasCompletedOnboarding, settings.apiKey]);
 
-  // Update apiKeyInput when settings load
   useEffect(() => {
     setApiKeyInput(settings.apiKey);
   }, [settings.apiKey]);
 
-  const handleOnboardingComplete = async (apiKey: string) => {
+  const handleOnboardingComplete = async (apiKey: string, vaultPath: string) => {
     await updateSettings({
       apiKey,
+      vaultPath,
       hasCompletedOnboarding: true,
     });
     setApiKeyInput(apiKey);
     setShowOnboarding(false);
+  };
+
+  const handleSelectVault = async () => {
+    const selected = await dialogOpen({
+      directory: true,
+      title: "Bilgi Tabanı Klasörü Seç",
+    });
+    if (selected) {
+      await updateSettings({ vaultPath: selected as string });
+    }
   };
 
   const handleStart = async () => {
@@ -278,7 +342,6 @@ export default function SettingsWindow() {
 
   const favoriteCount = history.filter((e) => e.isFavorite).length;
 
-  // Show loading while settings are being loaded
   if (!isLoaded) {
     return (
       <div className="flex h-screen items-center justify-center bg-black">
@@ -294,7 +357,6 @@ export default function SettingsWindow() {
     );
   }
 
-  // Show onboarding for new users
   if (showOnboarding) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
@@ -303,7 +365,6 @@ export default function SettingsWindow() {
     <div className="flex h-screen bg-black text-white">
       {/* Sidebar */}
       <div className="w-56 border-r border-zinc-800 p-4 flex flex-col">
-        {/* Logo */}
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white">
             <span className="text-lg font-bold text-black">L</span>
@@ -311,7 +372,6 @@ export default function SettingsWindow() {
           <span className="text-lg font-semibold">LingoSnap</span>
         </div>
 
-        {/* Stats Summary */}
         <div className="mb-6 p-3 rounded-xl bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700/50">
           <div className="flex items-center gap-2 mb-2">
             <Flame className="h-4 w-4 text-orange-400" />
@@ -324,7 +384,6 @@ export default function SettingsWindow() {
           </p>
         </div>
 
-        {/* Navigation */}
         <nav className="space-y-1 flex-1">
           <button
             onClick={() => setActiveTab("settings")}
@@ -355,18 +414,13 @@ export default function SettingsWindow() {
           </button>
         </nav>
 
-        {/* Keyboard shortcut reminder */}
         <div className="mb-4 p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
           <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <Keyboard size={14} />
-            <span>Çevirmek için:</span>
+            <MousePointer2 size={14} />
+            <span>Metin seç, otomatik çevirsin</span>
           </div>
-          <kbd className="mt-1 inline-block px-2 py-1 bg-zinc-800 rounded text-xs font-mono text-zinc-300">
-            Ctrl+Shift+C
-          </kbd>
         </div>
 
-        {/* Start Button */}
         <button
           onClick={handleStart}
           disabled={isStarting}
@@ -382,7 +436,6 @@ export default function SettingsWindow() {
           <div className="max-w-lg">
             <h2 className="mb-6 text-xl font-semibold">Ayarlar</h2>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-2 gap-3 mb-8">
               <StatsCard
                 icon={Zap}
@@ -414,11 +467,34 @@ export default function SettingsWindow() {
                 <p className="mt-2 text-xs text-zinc-500">
                   Ücretsiz API anahtarı için:{" "}
                   <button
-                    onClick={() => open("https://console.groq.com/")}
+                    onClick={() => shellOpen("https://console.groq.com/")}
                     className="text-white underline hover:text-blue-400"
                   >
                     console.groq.com
                   </button>
+                </p>
+              </div>
+
+              {/* Vault Path */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-400">
+                  Bilgi Tabanı Klasörü
+                </label>
+                <button
+                  onClick={handleSelectVault}
+                  className="w-full flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 hover:border-zinc-700 transition-colors text-left"
+                >
+                  <FolderOpen size={18} className="text-purple-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    {settings.vaultPath ? (
+                      <p className="text-sm text-white truncate">{settings.vaultPath}</p>
+                    ) : (
+                      <p className="text-sm text-zinc-500">Klasör seçilmedi</p>
+                    )}
+                  </div>
+                </button>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Çeviriler Markdown olarak bu klasöre kaydedilir
                 </p>
               </div>
 
@@ -480,115 +556,6 @@ export default function SettingsWindow() {
                 </div>
               </div>
 
-              {/* UX Settings */}
-              <div>
-                <label className="mb-3 block text-sm font-medium text-zinc-400">
-                  Kullanım Ayarları
-                </label>
-                <div className="space-y-2">
-                  <button
-                    onClick={async () => {
-                      const newValue = !settings.showFloatingIndicator;
-                      await updateSettings({ showFloatingIndicator: newValue });
-                      await invoke("toggle_indicator", { show: newValue });
-                    }}
-                    className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 hover:border-zinc-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Circle
-                        size={18}
-                        className={settings.showFloatingIndicator ? "text-purple-400" : "text-zinc-500"}
-                        fill={settings.showFloatingIndicator ? "currentColor" : "none"}
-                      />
-                      <div>
-                        <span className="text-sm">Ekran Göstergesi</span>
-                        <p className="text-xs text-zinc-500">Ekranda küçük L ikonu göster</p>
-                      </div>
-                    </div>
-                    <div
-                      className={`h-5 w-9 rounded-full transition-colors ${
-                        settings.showFloatingIndicator ? "bg-purple-500" : "bg-zinc-700"
-                      }`}
-                    >
-                      <div
-                        className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                          settings.showFloatingIndicator ? "translate-x-4" : "translate-x-0"
-                        }`}
-                      />
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => updateSettings({ autoTranslateClipboard: !settings.autoTranslateClipboard })}
-                    className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 hover:border-zinc-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Clipboard
-                        size={18}
-                        className={settings.autoTranslateClipboard ? "text-cyan-400" : "text-zinc-500"}
-                      />
-                      <div>
-                        <span className="text-sm">Otomatik Çeviri</span>
-                        <p className="text-xs text-zinc-500">Kopyaladığında otomatik çevir</p>
-                      </div>
-                    </div>
-                    <div
-                      className={`h-5 w-9 rounded-full transition-colors ${
-                        settings.autoTranslateClipboard ? "bg-cyan-500" : "bg-zinc-700"
-                      }`}
-                    >
-                      <div
-                        className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                          settings.autoTranslateClipboard ? "translate-x-4" : "translate-x-0"
-                        }`}
-                      />
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => updateSettings({ autoTranslateOnSelect: !settings.autoTranslateOnSelect })}
-                    className="flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 hover:border-zinc-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <MousePointer2
-                        size={18}
-                        className={settings.autoTranslateOnSelect ? "text-green-400" : "text-zinc-500"}
-                      />
-                      <div>
-                        <span className="text-sm">Seçince Çevir</span>
-                        <p className="text-xs text-zinc-500">Mouse ile seçince otomatik çevir</p>
-                      </div>
-                    </div>
-                    <div
-                      className={`h-5 w-9 rounded-full transition-colors ${
-                        settings.autoTranslateOnSelect ? "bg-green-500" : "bg-zinc-700"
-                      }`}
-                    >
-                      <div
-                        className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                          settings.autoTranslateOnSelect ? "translate-x-4" : "translate-x-0"
-                        }`}
-                      />
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Hotkey */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-zinc-400">
-                  Kısayol Tuşu
-                </label>
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm">
-                  <kbd className="px-2 py-1 bg-zinc-800 rounded font-mono">
-                    {settings.hotkey}
-                  </kbd>
-                </div>
-                <p className="mt-2 text-xs text-zinc-500">
-                  Metin seçip bu kısayola basarak çevirebilirsin
-                </p>
-              </div>
-
               {/* Theme */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-zinc-400">
@@ -644,7 +611,6 @@ export default function SettingsWindow() {
               )}
             </div>
 
-            {/* Filter tabs */}
             <div className="mb-4 flex gap-2">
               <button
                 onClick={() => setHistoryFilter("all")}
@@ -669,7 +635,6 @@ export default function SettingsWindow() {
               </button>
             </div>
 
-            {/* Search */}
             <input
               type="text"
               value={search}
@@ -678,7 +643,6 @@ export default function SettingsWindow() {
               className="mb-4 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-white focus:outline-none"
             />
 
-            {/* History List */}
             <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-2">
               {filteredHistory.length === 0 ? (
                 <div className="py-12 text-center">
@@ -693,7 +657,7 @@ export default function SettingsWindow() {
                   <p className="text-xs text-zinc-600 mt-1">
                     {historyFilter === "favorites"
                       ? "Çevirileri yıldızlayarak favorilere ekle"
-                      : "Ctrl+Shift+C ile ilk çevirini yap!"}
+                      : "Metin seçerek ilk çevirini yap!"}
                   </p>
                 </div>
               ) : (
@@ -725,6 +689,11 @@ export default function SettingsWindow() {
                             <p className="text-xs text-zinc-500">
                               {new Date(entry.timestamp).toLocaleString("tr-TR")}
                             </p>
+                            {entry.result.topic && (
+                              <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-xs text-zinc-400">
+                                {entry.result.topic}
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-zinc-400 line-clamp-2">
                             {entry.originalText}
@@ -760,8 +729,7 @@ export default function SettingsWindow() {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="absolute bottom-4 right-6 text-xs text-zinc-600">v1.0.0</div>
+      <div className="absolute bottom-4 right-6 text-xs text-zinc-600">v2.0.0</div>
     </div>
   );
 }

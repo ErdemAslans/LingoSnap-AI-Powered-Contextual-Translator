@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "LingoSnap default capabilities",
-  "windows": ["main", "popup", "history", "indicator"],
+  "windows": ["main", "popup", "history"],
   "permissions": [
     "core:default",
     "core:window:default",
@@ -19,10 +19,6 @@
     "core:window:allow-cursor-position",
     "core:tray:default",
     "core:tray:allow-set-icon",
-    "global-shortcut:default",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
-    "global-shortcut:allow-is-registered",
     "clipboard-manager:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
@@ -36,6 +32,18 @@
     "store:allow-load",
     "shell:default",
     "shell:allow-open",
-    "log:default"
+    "log:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "fs:default",
+    "fs:allow-mkdir",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-exists",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "**" }]
+    }
   ]
 }

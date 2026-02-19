@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 #[cfg(windows)]
@@ -10,14 +10,17 @@ use winapi::shared::minwindef::{LPARAM, LRESULT, WPARAM};
 use winapi::shared::windef::HHOOK;
 #[cfg(windows)]
 use winapi::um::winuser::{
-    CallNextHookEx, GetMessageW, SetWindowsHookExW, UnhookWindowsHookEx,
+    CallNextHookEx, GetKeyState, GetMessageW, SetWindowsHookExW, UnhookWindowsHookEx,
     MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    VK_SHIFT, VK_CONTROL, VK_MENU,
 };
 
-// Global state
 static MOUSE_HOOK_ENABLED: AtomicBool = AtomicBool::new(false);
-static AUTO_TRANSLATE_ON_SELECT: AtomicBool = AtomicBool::new(false);
+static TRANSLATING: AtomicBool = AtomicBool::new(false);
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
+
+static LAST_TRIGGER_MS: AtomicU64 = AtomicU64::new(0);
+const COOLDOWN_MS: u64 = 3000;
 
 #[cfg(windows)]
 static mut HOOK_HANDLE: Option<HHOOK> = None;
@@ -25,36 +28,89 @@ static mut HOOK_HANDLE: Option<HHOOK> = None;
 static mut MOUSE_DOWN_TIME: Option<Instant> = None;
 #[cfg(windows)]
 static mut MOUSE_DOWN_POS: (i32, i32) = (0, 0);
+#[cfg(windows)]
+static DEBOUNCE_CANCEL: AtomicBool = AtomicBool::new(false);
 
-// Minimum drag distance and time to consider it a text selection
-const MIN_SELECTION_DISTANCE: i32 = 20;
-const MIN_SELECTION_TIME_MS: u64 = 150;
+const MIN_SELECTION_DISTANCE: i32 = 30;
+const MIN_SELECTION_TIME_MS: u64 = 200;
+const DEBOUNCE_MS: u64 = 400;
+
+#[cfg(windows)]
+fn is_modifier_held() -> bool {
+    unsafe {
+        let shift = GetKeyState(VK_SHIFT) as u16;
+        let ctrl = GetKeyState(VK_CONTROL) as u16;
+        let alt = GetKeyState(VK_MENU) as u16;
+        (shift & 0x8000 != 0) || (ctrl & 0x8000 != 0) || (alt & 0x8000 != 0)
+    }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
 
 #[cfg(windows)]
 unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code >= 0 && AUTO_TRANSLATE_ON_SELECT.load(Ordering::Relaxed) {
+    if code >= 0 {
         let mouse_struct = *(lparam as *const MSLLHOOKSTRUCT);
 
         match wparam as u32 {
             WM_LBUTTONDOWN => {
+                DEBOUNCE_CANCEL.store(true, Ordering::Relaxed);
                 MOUSE_DOWN_TIME = Some(Instant::now());
                 MOUSE_DOWN_POS = (mouse_struct.pt.x, mouse_struct.pt.y);
             }
             WM_LBUTTONUP => {
                 if let Some(down_time) = MOUSE_DOWN_TIME.take() {
+                    if is_modifier_held() {
+                        return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+                    }
+
+                    if TRANSLATING.load(Ordering::Relaxed) {
+                        return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+                    }
+
+                    let now = now_ms();
+                    let last = LAST_TRIGGER_MS.load(Ordering::Relaxed);
+                    if last > 0 && now - last < COOLDOWN_MS {
+                        return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+                    }
+
                     let elapsed = down_time.elapsed().as_millis() as u64;
                     let dx = (mouse_struct.pt.x - MOUSE_DOWN_POS.0).abs();
                     let dy = (mouse_struct.pt.y - MOUSE_DOWN_POS.1).abs();
                     let distance = ((dx * dx + dy * dy) as f64).sqrt() as i32;
 
-                    // Check if this looks like a text selection (dragged for some distance/time)
                     if elapsed >= MIN_SELECTION_TIME_MS && distance >= MIN_SELECTION_DISTANCE {
-                        // Trigger translation after a small delay
                         if let Some(app) = APP_HANDLE.get() {
                             let app_clone = app.clone();
+                            DEBOUNCE_CANCEL.store(false, Ordering::Relaxed);
+
                             thread::spawn(move || {
-                                // Small delay to let selection complete
-                                thread::sleep(Duration::from_millis(100));
+                                thread::sleep(Duration::from_millis(DEBOUNCE_MS));
+
+                                if DEBOUNCE_CANCEL.load(Ordering::Relaxed) {
+                                    return;
+                                }
+
+                                if is_modifier_held() {
+                                    return;
+                                }
+
+                                if TRANSLATING.load(Ordering::Relaxed) {
+                                    return;
+                                }
+
+                                let now = now_ms();
+                                let last = LAST_TRIGGER_MS.load(Ordering::Relaxed);
+                                if last > 0 && now - last < COOLDOWN_MS {
+                                    return;
+                                }
+
+                                LAST_TRIGGER_MS.store(now, Ordering::Relaxed);
                                 let _ = app_clone.emit("auto-select-translate", ());
                             });
                         }
@@ -71,7 +127,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
 #[cfg(windows)]
 pub fn start_mouse_hook(app: &AppHandle) {
     if MOUSE_HOOK_ENABLED.load(Ordering::Relaxed) {
-        return; // Already running
+        return;
     }
 
     let _ = APP_HANDLE.set(app.clone());
@@ -84,7 +140,6 @@ pub fn start_mouse_hook(app: &AppHandle) {
                 HOOK_HANDLE = Some(hook);
                 MOUSE_HOOK_ENABLED.store(true, Ordering::Relaxed);
 
-                // Message loop to keep hook alive
                 let mut msg = std::mem::zeroed();
                 while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
                     if !MOUSE_HOOK_ENABLED.load(Ordering::Relaxed) {
@@ -92,7 +147,6 @@ pub fn start_mouse_hook(app: &AppHandle) {
                     }
                 }
 
-                // Cleanup
                 if let Some(h) = HOOK_HANDLE.take() {
                     UnhookWindowsHookEx(h);
                 }
@@ -101,33 +155,9 @@ pub fn start_mouse_hook(app: &AppHandle) {
     });
 }
 
-#[cfg(windows)]
-#[allow(dead_code)]
-pub fn stop_mouse_hook() {
-    MOUSE_HOOK_ENABLED.store(false, Ordering::Relaxed);
+pub fn set_translating(translating: bool) {
+    TRANSLATING.store(translating, Ordering::Relaxed);
 }
 
-#[cfg(windows)]
-pub fn set_auto_translate_on_select(enabled: bool) {
-    AUTO_TRANSLATE_ON_SELECT.store(enabled, Ordering::Relaxed);
-}
-
-#[cfg(windows)]
-pub fn is_auto_translate_on_select_enabled() -> bool {
-    AUTO_TRANSLATE_ON_SELECT.load(Ordering::Relaxed)
-}
-
-// Non-Windows stubs
 #[cfg(not(windows))]
 pub fn start_mouse_hook(_app: &AppHandle) {}
-
-#[cfg(not(windows))]
-pub fn stop_mouse_hook() {}
-
-#[cfg(not(windows))]
-pub fn set_auto_translate_on_select(_enabled: bool) {}
-
-#[cfg(not(windows))]
-pub fn is_auto_translate_on_select_enabled() -> bool {
-    false
-}

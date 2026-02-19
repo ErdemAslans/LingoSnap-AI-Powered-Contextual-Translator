@@ -268,7 +268,7 @@ export default function TranslationPopup() {
                       </button>
                     )}
                   </div>
-                  <p className="text-sm text-zinc-300 leading-relaxed bg-zinc-800/50 rounded-lg px-3 py-2">
+                  <p className="text-sm text-zinc-300 leading-relaxed bg-zinc-800/50 rounded-lg px-3 py-2 whitespace-pre-wrap max-h-32 overflow-y-auto">
                     {originalText}
                   </p>
                 </div>
@@ -312,10 +312,24 @@ export default function TranslationPopup() {
                       </button>
                     )}
                   </div>
-                  <p className="text-base font-medium text-white leading-relaxed bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg px-3 py-3 border border-zinc-700/50">
+                  <p className="text-base font-medium text-white leading-relaxed bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg px-3 py-3 border border-zinc-700/50 whitespace-pre-wrap max-h-48 overflow-y-auto">
                     {currentTranslation.translation}
                   </p>
                 </div>
+
+                {/* Context Note */}
+                {currentTranslation.contextNote && (
+                  <div className="rounded-lg bg-zinc-800/30 border border-zinc-700/30 px-3 py-2">
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      {currentTranslation.contextNote}
+                    </p>
+                    {currentTranslation.topic && (
+                      <span className="mt-1 inline-block px-2 py-0.5 rounded bg-zinc-700/50 text-xs text-zinc-300">
+                        {currentTranslation.topic}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex items-center justify-between pt-2">

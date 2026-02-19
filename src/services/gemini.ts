@@ -1,8 +1,7 @@
 import type { TranslationResult } from "../types";
 
-// Groq API - Free tier with Llama models
 const API_BASE = "https://api.groq.com/openai/v1";
-const MODEL = "llama-3.3-70b-versatile"; // Latest Llama model, very capable
+const MODEL = "llama-3.3-70b-versatile";
 
 interface GroqResponse {
   choices: Array<{
@@ -10,10 +9,6 @@ interface GroqResponse {
       content: string;
     };
   }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-  };
 }
 
 interface GroqError {
@@ -23,23 +18,41 @@ interface GroqError {
   };
 }
 
+export interface TranslationContext {
+  recentTranslations?: Array<{ original: string; translation: string; topic?: string }>;
+  currentTopic?: string;
+}
+
 async function translateWithGroq(
   text: string,
-  apiKey: string
-): Promise<{ translation: string; explanation?: string }> {
-  const prompt = `Translate the following English text to Turkish. You are a master translator who understands context, idioms, and cultural nuances.
+  apiKey: string,
+  context?: TranslationContext
+): Promise<TranslationResult> {
+  let contextBlock = "";
+  if (context?.recentTranslations && context.recentTranslations.length > 0) {
+    contextBlock = `\n\nÖnceki ilgili çeviriler (tutarlılık için referans al):
+${context.recentTranslations.map((t) => `- "${t.original.slice(0, 80)}..." → "${t.translation.slice(0, 80)}..."${t.topic ? ` [${t.topic}]` : ""}`).join("\n")}`;
+  }
 
-Rules:
-1. Preserve the original meaning and tone
-2. Use natural, fluent Turkish
-3. For technical terms, keep the original if there's no good Turkish equivalent
-4. For idioms, find the Turkish equivalent rather than literal translation
-5. If the text is code/technical, preserve variable names and function names
+  const prompt = `Aşağıdaki İngilizce metni Türkçeye çevir.${contextBlock}
 
-Text to translate:
+Kurallar:
+1. Orijinal anlamı ve tonunu koru
+2. Doğal, akıcı Türkçe kullan
+3. Teknik terimlerin iyi bir Türkçe karşılığı yoksa orijinalini koru
+4. Deyimler için Türkçe karşılığını bul
+5. FORMATI KORU: Satır sonlarını (\\n), paragrafları, madde işaretlerini, numaralı listeleri aynen koru
+6. Ayrı paragrafları tek blok haline getirme — orijinaldeki yapıyı birebir koru
+7. Kod/teknik terimlerde değişken ve fonksiyon adlarını değiştirme
+
+Çevrilecek metin:
 ${text}
 
-Provide ONLY the Turkish translation. No explanations, no "TRANSLATION:" prefix, just the translated text.`;
+Yanıtını şu JSON formatında ver (başka hiçbir şey ekleme):
+{"translation": "çeviri metni buraya", "topic": "konuadı", "contextNote": "varsa kısa bağlam notu yoksa null"}
+
+topic: Metnin ana konusu (ör: Docker, React, Kubernetes, Genel). Tek kelime veya kısa.
+contextNote: ${context?.recentTranslations?.length ? "Bu çeviri önceki çevirilerle nasıl bağlantılı? Kısa bir not yaz." : "null"}`;
 
   const res = await fetch(`${API_BASE}/chat/completions`, {
     method: "POST",
@@ -52,7 +65,7 @@ Provide ONLY the Turkish translation. No explanations, no "TRANSLATION:" prefix,
       messages: [
         {
           role: "system",
-          content: "You are an expert English-Turkish translator. Provide only the Turkish translation, no additional text or explanations.",
+          content: "Sen uzman bir İngilizce-Türkçe çevirmensin. Kullanıcının öğrenme sürecini takip ediyorsun. Yanıtlarını DAİMA geçerli JSON formatında ver. Başka hiçbir metin ekleme.",
         },
         {
           role: "user",
@@ -60,16 +73,15 @@ Provide ONLY the Turkish translation. No explanations, no "TRANSLATION:" prefix,
         },
       ],
       temperature: 0.3,
-      max_tokens: 2000,
+      max_tokens: 3000,
+      response_format: { type: "json_object" },
     }),
   });
 
   if (!res.ok) {
     const errData: GroqError = await res.json().catch(() => ({}));
     const errorMsg = errData.error?.message || `Groq API error ${res.status}`;
-    console.error("[LingoSnap] Groq API Error:", res.status, errorMsg);
 
-    // User-friendly error messages
     if (res.status === 401) {
       throw new Error("API anahtarı geçersiz. Lütfen Groq Console'dan yeni bir anahtar alın.");
     }
@@ -88,36 +100,39 @@ Provide ONLY the Turkish translation. No explanations, no "TRANSLATION:" prefix,
     throw new Error("Invalid response from Groq API");
   }
 
-  const translation = data.choices[0].message.content.trim();
+  const raw = data.choices[0].message.content.trim();
 
-  return {
-    translation: translation.replace(/^["']|["']$/g, "").trim(),
-  };
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      translation: parsed.translation || raw,
+      topic: parsed.topic || undefined,
+      contextNote: parsed.contextNote === "null" || !parsed.contextNote ? undefined : parsed.contextNote,
+      tags: parsed.tags || undefined,
+    };
+  } catch {
+    // Fallback: if JSON parsing fails, treat as plain translation
+    return {
+      translation: raw.replace(/^["']|["']$/g, "").trim(),
+    };
+  }
 }
 
 export async function translateText(
   text: string,
-  apiKey: string
+  apiKey: string,
+  context?: TranslationContext
 ): Promise<TranslationResult> {
   if (!apiKey || apiKey.trim() === "") {
     throw new Error("API key gerekli. console.groq.com'dan ücretsiz alabilirsiniz.");
   }
 
   try {
-    const { translation } = await translateWithGroq(text, apiKey);
-
-    return {
-      translation,
-      explanation: undefined,
-      original_context: "AI-powered translation via Groq",
-    };
+    return await translateWithGroq(text, apiKey, context);
   } catch (error) {
-    console.error("[LingoSnap] Translation error:", error);
-
     if (error instanceof TypeError && error.message.includes("fetch")) {
       throw new Error("İnternet bağlantısı yok. Bağlantınızı kontrol edin.");
     }
-
     throw error;
   }
 }

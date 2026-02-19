@@ -40,7 +40,6 @@ pub fn get_cursor_position() -> Result<CursorPos, String> {
         }
     }
 
-    // Fallback: return center of screen
     Ok(CursorPos { x: 960, y: 540 })
 }
 
@@ -84,45 +83,14 @@ pub fn hide_window(app: AppHandle, label: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn trigger_translate(app: AppHandle) -> Result<(), String> {
-    // Simulate Ctrl+C to copy selected text
     simulate_ctrl_c();
-
-    // Wait for clipboard to update
     std::thread::sleep(std::time::Duration::from_millis(150));
-
-    // Emit translate event
     app.emit("translate-hotkey", ()).map_err(|e| e.to_string())?;
-
     Ok(())
 }
 
 #[tauri::command]
-pub fn toggle_indicator(app: AppHandle, show: bool) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("indicator") {
-        if show {
-            window.show().map_err(|e| e.to_string())?;
-        } else {
-            window.hide().map_err(|e| e.to_string())?;
-        }
-    }
+pub fn set_translating_state(translating: bool) -> Result<(), String> {
+    mouse_hook::set_translating(translating);
     Ok(())
-}
-
-#[tauri::command]
-pub fn is_indicator_visible(app: AppHandle) -> Result<bool, String> {
-    if let Some(window) = app.get_webview_window("indicator") {
-        return window.is_visible().map_err(|e| e.to_string());
-    }
-    Ok(false)
-}
-
-#[tauri::command]
-pub fn set_auto_translate_on_select(enabled: bool) -> Result<(), String> {
-    mouse_hook::set_auto_translate_on_select(enabled);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn get_auto_translate_on_select() -> Result<bool, String> {
-    Ok(mouse_hook::is_auto_translate_on_select_enabled())
 }
