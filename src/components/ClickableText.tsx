@@ -1,14 +1,14 @@
-// ClickableText — robust click + drag-select for word/phrase capture.
+// ClickableText — three independent ways to pick a word or phrase:
 //
-// Approach: on mouse-down on a word, attach window-level mousemove/mouseup
-// listeners that hit-test the cursor position against word bounding boxes.
-// This is independent of setPointerCapture, browser text-selection policies,
-// or Tauri's transparent-window quirks — pure coordinate math.
+//   1. Click a word           → look up that single word.
+//   2. Press, drag across      → look up the joined phrase (window-level
+//      words, release          mouse listeners + hit-test against word boxes).
+//   3. Shift+click             → first Shift+click marks an anchor; second
+//                                Shift+click closes the range and looks up
+//                                the phrase between them.
 //
-// UX:
-//   - Click a word                → look up that word.
-//   - Press, drag across words, release → look up the joined phrase.
-//   - Words in the active drag range are highlighted (yellow).
+// The Shift+click path needs no drag tracking and is the most reliable
+// fallback for environments where pointer-drag is unreliable.
 
 import { useMemo, useRef, useState } from "react";
 
@@ -35,6 +35,14 @@ function tokenize(text: string): Token[] {
   return tokens;
 }
 
+function positionOfToken(tokens: Token[], targetIdx: number): number {
+  let pos = 0;
+  for (let i = 0; i < targetIdx; i++) {
+    pos += tokens[i].text.length;
+  }
+  return pos;
+}
+
 interface ClickableTextProps {
   text: string;
   onSelectToken: (selectedText: string, fullSentence: string) => void;
@@ -57,6 +65,19 @@ export default function ClickableText({ text, onSelectToken }: ClickableTextProp
   const wordRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragEnd, setDragEnd] = useState<number | null>(null);
+  const [shiftAnchor, setShiftAnchor] = useState<number | null>(null);
+
+  const emit = (a: number, b: number) => {
+    if (a === b) {
+      onSelectToken(tokens[wordIdxToToken[a]].text, text);
+      return;
+    }
+    const firstT = wordIdxToToken[a];
+    const lastT = wordIdxToToken[b];
+    const startChar = positionOfToken(tokens, firstT);
+    const endChar = positionOfToken(tokens, lastT) + tokens[lastT].text.length;
+    onSelectToken(text.slice(startChar, endChar), text);
+  };
 
   const wordIndexAt = (clientX: number, clientY: number): number | null => {
     for (let i = 0; i < totalWords; i++) {
@@ -70,20 +91,40 @@ export default function ClickableText({ text, onSelectToken }: ClickableTextProp
     return null;
   };
 
-  const beginDrag = (e: React.MouseEvent, wordIdx: number) => {
+  const handleMouseDown = (e: React.MouseEvent, wordIdx: number) => {
     if (e.button !== 0) return;
+
+    // Shift+click: range select mode.
+    if (e.shiftKey) {
+      e.preventDefault();
+      if (shiftAnchor === null) {
+        setShiftAnchor(wordIdx);
+      } else {
+        const a = Math.min(shiftAnchor, wordIdx);
+        const b = Math.max(shiftAnchor, wordIdx);
+        setShiftAnchor(null);
+        emit(a, b);
+      }
+      return;
+    }
+
+    // Plain click / press-drag-release: start a drag.
     e.preventDefault();
+    // Cancel any pending shift anchor when starting a fresh drag.
+    setShiftAnchor(null);
 
     setDragStart(wordIdx);
     setDragEnd(wordIdx);
 
-    // Local mirrors so window handlers don't lose track if React batches state.
+    // Local mirrors to avoid React's async state in the window handlers.
     let curStart = wordIdx;
     let curEnd = wordIdx;
+    let dragged = false;
 
     const onMove = (ev: MouseEvent) => {
       const idx = wordIndexAt(ev.clientX, ev.clientY);
       if (idx !== null && idx !== curEnd) {
+        if (idx !== curStart) dragged = true;
         curEnd = idx;
         setDragEnd(idx);
       }
@@ -93,31 +134,24 @@ export default function ClickableText({ text, onSelectToken }: ClickableTextProp
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
 
-      const a = Math.min(curStart, curEnd);
-      const b = Math.max(curStart, curEnd);
-
-      // Reset visual state immediately to clear highlight.
       setDragStart(null);
       setDragEnd(null);
 
-      if (a === b) {
-        const tIdx = wordIdxToToken[a];
-        onSelectToken(tokens[tIdx].text, text);
-        return;
+      const a = Math.min(curStart, curEnd);
+      const b = Math.max(curStart, curEnd);
+      if (!dragged) {
+        // Treat as plain click → single word.
+        emit(curStart, curStart);
+      } else {
+        emit(a, b);
       }
-
-      const firstT = wordIdxToToken[a];
-      const lastT = wordIdxToToken[b];
-      const startChar = positionOfToken(tokens, firstT);
-      const endChar = positionOfToken(tokens, lastT) + tokens[lastT].text.length;
-      onSelectToken(text.slice(startChar, endChar), text);
     };
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };
 
-  const inRange = (wordIdx: number): boolean => {
+  const inDragRange = (wordIdx: number): boolean => {
     if (dragStart === null || dragEnd === null) return false;
     const a = Math.min(dragStart, dragEnd);
     const b = Math.max(dragStart, dragEnd);
@@ -133,33 +167,37 @@ export default function ClickableText({ text, onSelectToken }: ClickableTextProp
           return <span key={idx}>{token.text}</span>;
         }
         const wIdx = wordCounter++;
-        const highlighted = inRange(wIdx);
+        const highlighted = inDragRange(wIdx);
+        const isAnchor = shiftAnchor === wIdx;
         return (
           <span
             key={idx}
             ref={(el) => {
               wordRefs.current[wIdx] = el;
             }}
-            onMouseDown={(e) => beginDrag(e, wIdx)}
+            onMouseDown={(e) => handleMouseDown(e, wIdx)}
             className={`cursor-pointer rounded px-0.5 transition-colors ${
               highlighted
-                ? "bg-yellow-500/30 text-white"
+                ? "bg-yellow-500/40 text-white"
+                : isAnchor
+                ? "bg-purple-500/30 text-white outline outline-1 outline-purple-400"
                 : "hover:bg-blue-500/20 hover:underline"
             }`}
-            title="Tıkla: kelimeyi ara · Tutup sürükle: ifade seç"
+            title={
+              shiftAnchor !== null
+                ? "Shift+tıkla: ikinci uç (ifade tamamla)"
+                : "Tıkla · Tutup sürükle · Shift+tıkla (sonra Shift+tıkla)"
+            }
           >
             {token.text}
           </span>
         );
       })}
+      {shiftAnchor !== null && (
+        <span className="ml-2 inline-block rounded bg-purple-500/20 px-2 py-0.5 text-xs text-purple-300">
+          ⇧ Shift ile ikinci kelimeye tıkla
+        </span>
+      )}
     </span>
   );
-}
-
-function positionOfToken(tokens: Token[], targetIdx: number): number {
-  let pos = 0;
-  for (let i = 0; i < targetIdx; i++) {
-    pos += tokens[i].text.length;
-  }
-  return pos;
 }
