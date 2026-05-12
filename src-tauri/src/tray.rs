@@ -1,17 +1,19 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "show", "Ayarlar", true, None::<&str>)?;
+    let review_item = MenuItem::with_id(app, "review", "Tekrar Zamanı", true, None::<&str>)?;
     let history_item = MenuItem::with_id(app, "history", "Çeviri Geçmişi", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Çıkış", true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[
         &show_item,
+        &review_item,
         &history_item,
         &separator,
         &quit_item
@@ -27,12 +29,21 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
+                    let _ = window.emit("navigate-tab", "settings");
+                }
+            }
+            "review" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = window.emit("navigate-tab", "review");
                 }
             }
             "history" => {
-                if let Some(window) = app.get_webview_window("history") {
+                if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
+                    let _ = window.emit("navigate-tab", "history");
                 }
             }
             "quit" => {

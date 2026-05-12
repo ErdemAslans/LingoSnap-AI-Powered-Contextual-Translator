@@ -1,6 +1,11 @@
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 
+use crate::mouse_hook;
+
 pub fn show_popup_at_cursor(app: &AppHandle) -> tauri::Result<()> {
+    // Suppress the global mouse hook while the popup is on screen.
+    mouse_hook::set_popup_open(true);
+
     if let Some(window) = app.get_webview_window("popup") {
         // Try to get cursor position; fall back to center
         let cursor_pos = window
@@ -57,5 +62,7 @@ pub fn hide_popup(app: &AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("popup") {
         let _ = window.hide();
     }
+    // Re-enable the global mouse hook now that the popup is gone.
+    mouse_hook::set_popup_open(false);
     Ok(())
 }

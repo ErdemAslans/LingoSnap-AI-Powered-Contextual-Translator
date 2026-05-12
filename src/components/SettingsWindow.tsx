@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSettings } from "../hooks/useSettings";
 import { useHistory } from "../hooks/useHistory";
+import { useSRS } from "../hooks/useSRS";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
+import { testApiKey } from "../services/groq";
 import {
   Settings,
   History,
@@ -22,19 +25,24 @@ import {
   ChevronRight,
   FolderOpen,
   MousePointer2,
+  BookOpen,
+  GraduationCap,
 } from "lucide-react";
+import ReviewTab from "./ReviewTab";
+import { CEFR_LEVELS, type CefrLevel } from "../types/srs";
 
-type Tab = "settings" | "history";
+type Tab = "settings" | "history" | "review";
 type HistoryFilter = "all" | "favorites";
 
 function Onboarding({
   onComplete,
 }: {
-  onComplete: (apiKey: string, vaultPath: string) => void;
+  onComplete: (apiKey: string, vaultPath: string, cefrLevel: CefrLevel) => void;
 }) {
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
   const [vaultPath, setVaultPath] = useState("");
+  const [cefrLevel, setCefrLevel] = useState<CefrLevel>("B1");
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState("");
 
@@ -56,18 +64,27 @@ function Onboarding({
     setIsValidating(true);
     setError("");
 
-    setTimeout(() => {
-      setIsValidating(false);
+    const result = await testApiKey(apiKey);
+    setIsValidating(false);
+
+    if (result === "ok") {
       setStep(3);
-    }, 500);
+    } else {
+      setError(`API anahtarı doğrulanamadı: ${result}`);
+    }
   };
 
-  const handleFinish = () => {
+  const handleSelectVaultAndContinue = () => {
     if (!vaultPath) {
       setError("Lütfen bir klasör seçin");
       return;
     }
-    onComplete(apiKey, vaultPath);
+    setError("");
+    setStep(4);
+  };
+
+  const handleFinish = () => {
+    onComplete(apiKey, vaultPath, cefrLevel);
   };
 
   return (
@@ -209,7 +226,7 @@ function Onboarding({
 
             <h2 className="text-2xl font-bold mb-2">Bilgi Tabanı Klasörü</h2>
             <p className="text-zinc-400 mb-6">
-              Çevirilerini nereye kaydetmek istersin? Bu klasör senin kişisel bilgi tabanın olacak.
+              Çevirilerini ve kelime kartlarını nereye kaydetmek istersin? Bu klasör senin kişisel bilgi tabanın olacak.
               Obsidian gibi not uygulamalarıyla da kullanabilirsin.
             </p>
 
@@ -236,9 +253,61 @@ function Onboarding({
             {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
 
             <button
-              onClick={handleFinish}
+              onClick={handleSelectVaultAndContinue}
               disabled={!vaultPath}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-4 text-base font-semibold text-black hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Devam
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="animate-fadeIn">
+            <button
+              onClick={() => setStep(3)}
+              className="mb-6 text-sm text-zinc-500 hover:text-white transition-colors"
+            >
+              ← Geri
+            </button>
+
+            <h2 className="text-2xl font-bold mb-2">İngilizce seviyen?</h2>
+            <p className="text-zinc-400 mb-6">
+              Tekrar egzersizleri bu seviyeye göre kalibre olur. Sonradan ayarlardan değiştirebilirsin.
+            </p>
+
+            <div className="grid grid-cols-3 gap-2 mb-6">
+              {CEFR_LEVELS.map((lvl) => (
+                <button
+                  key={lvl}
+                  onClick={() => setCefrLevel(lvl)}
+                  className={`rounded-xl border p-4 transition-colors ${
+                    cefrLevel === lvl
+                      ? "border-white bg-white text-black"
+                      : "border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="text-lg font-bold">{lvl}</div>
+                  <div className="text-xs mt-1 opacity-70">
+                    {lvl === "A1" ? "Yeni başlayan" :
+                     lvl === "A2" ? "Temel" :
+                     lvl === "B1" ? "Orta-alt" :
+                     lvl === "B2" ? "Orta-üst" :
+                     lvl === "C1" ? "İleri" :
+                     "Usta"}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <p className="mb-6 text-xs text-zinc-500">
+              Emin değilsen <b>B1</b> ile başla — sonradan ayarlanabilir.
+            </p>
+
+            <button
+              onClick={handleFinish}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-4 text-base font-semibold text-black hover:bg-zinc-200 transition-colors"
             >
               Tamamla
               <Check size={18} />
@@ -289,6 +358,9 @@ function StatsCard({
 export default function SettingsWindow() {
   const { settings, stats, isLoaded, updateSettings } = useSettings();
   const { history, search, setSearch, deleteEntry, clearAll } = useHistory();
+  const { stats: srsStatsFn } = useSRS();
+  const srsStats = useMemo(() => srsStatsFn(), [srsStatsFn]);
+  const dueToday = srsStats.dueToday;
   const [activeTab, setActiveTab] = useState<Tab>("settings");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [apiKeyInput, setApiKeyInput] = useState(settings.apiKey);
@@ -305,10 +377,24 @@ export default function SettingsWindow() {
     setApiKeyInput(settings.apiKey);
   }, [settings.apiKey]);
 
-  const handleOnboardingComplete = async (apiKey: string, vaultPath: string) => {
+  // Tray menu navigation
+  useEffect(() => {
+    const unlisten = listen<string>("navigate-tab", (event) => {
+      const t = event.payload;
+      if (t === "settings" || t === "history" || t === "review") {
+        setActiveTab(t);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  const handleOnboardingComplete = async (apiKey: string, vaultPath: string, cefrLevel: CefrLevel) => {
     await updateSettings({
       apiKey,
       vaultPath,
+      cefrLevel,
       hasCompletedOnboarding: true,
     });
     setApiKeyInput(apiKey);
@@ -412,6 +498,22 @@ export default function SettingsWindow() {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setActiveTab("review")}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === "review"
+                ? "bg-white text-black"
+                : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+            }`}
+          >
+            <BookOpen size={18} />
+            Tekrar
+            {dueToday > 0 && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-xs font-bold text-white">
+                {dueToday}
+              </span>
+            )}
+          </button>
         </nav>
 
         <div className="mb-4 p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
@@ -432,11 +534,13 @@ export default function SettingsWindow() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === "settings" ? (
+        {activeTab === "review" ? (
+          <ReviewTab />
+        ) : activeTab === "settings" ? (
           <div className="max-w-lg">
             <h2 className="mb-6 text-xl font-semibold">Ayarlar</h2>
 
-            <div className="grid grid-cols-2 gap-3 mb-8">
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <StatsCard
                 icon={Zap}
                 label="Toplam Çeviri"
@@ -448,6 +552,20 @@ export default function SettingsWindow() {
                 label="En Uzun Seri"
                 value={`${stats.longestStreak} gün`}
                 color="bg-orange-500/20 text-orange-400"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-8">
+              <StatsCard
+                icon={BookOpen}
+                label="Toplam Kart"
+                value={srsStats.totalCards}
+                color="bg-purple-500/20 text-purple-400"
+              />
+              <StatsCard
+                icon={GraduationCap}
+                label="Mastered"
+                value={srsStats.masteredCount}
+                color="bg-emerald-500/20 text-emerald-400"
               />
             </div>
 
@@ -554,6 +672,99 @@ export default function SettingsWindow() {
                     </div>
                   </button>
                 </div>
+              </div>
+
+              {/* CEFR Level */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-400">
+                  Hedef Dil Seviyen (CEFR)
+                </label>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {CEFR_LEVELS.map((lvl) => (
+                    <button
+                      key={lvl}
+                      onClick={() => updateSettings({ cefrLevel: lvl })}
+                      className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
+                        settings.cefrLevel === lvl
+                          ? "border-white bg-white text-black"
+                          : "border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Egzersizlerin zorluğu bu seviyeye göre kalibre edilir
+                </p>
+              </div>
+
+              {/* Daily new word goal */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-400">
+                  Günlük yeni kelime hedefi: {settings.dailyNewWordGoal}
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  step="5"
+                  value={settings.dailyNewWordGoal}
+                  onChange={(e) =>
+                    updateSettings({ dailyNewWordGoal: parseInt(e.target.value) })
+                  }
+                  className="w-full accent-white"
+                />
+                <p className="mt-1 text-xs text-zinc-500">
+                  Günde {settings.dailyNewWordGoal} yeni kelime/ifade. 0 = sınır yok.
+                </p>
+              </div>
+
+              {/* Exercise mix */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-400">
+                  Egzersiz Dağılımı
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["balanced", "production_heavy", "recognition_heavy"] as const).map((mix) => (
+                    <button
+                      key={mix}
+                      onClick={() => updateSettings({ exerciseMix: mix })}
+                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                        settings.exerciseMix === mix
+                          ? "border-white bg-white text-black"
+                          : "border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      {mix === "balanced"
+                        ? "Dengeli"
+                        : mix === "production_heavy"
+                        ? "Üretim ağırlıklı"
+                        : "Tanıma ağırlıklı"}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Üretim ağırlıklı: kelime/cümle yazma soruları artar (öğrenme kazanımı daha yüksek)
+                </p>
+              </div>
+
+              {/* Review batch size */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-400">
+                  Tek oturumda maks. tekrar: {settings.reviewBatchSize}
+                </label>
+                <input
+                  type="range"
+                  min="5"
+                  max="100"
+                  step="5"
+                  value={settings.reviewBatchSize}
+                  onChange={(e) =>
+                    updateSettings({ reviewBatchSize: parseInt(e.target.value) })
+                  }
+                  className="w-full accent-white"
+                />
               </div>
 
               {/* Theme */}

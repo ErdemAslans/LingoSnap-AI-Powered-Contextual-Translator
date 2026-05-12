@@ -1,7 +1,6 @@
 export interface TranslationResult {
   translation: string;
   contextNote?: string;
-  relatedTopics?: string[];
   topic?: string;
   tags?: string[];
 }
@@ -14,6 +13,10 @@ export interface TranslationEntry {
   isFavorite?: boolean;
 }
 
+import type { CefrLevel, ExerciseType } from "./srs";
+
+export type ExerciseMix = "balanced" | "production_heavy" | "recognition_heavy";
+
 export interface AppSettings {
   apiKey: string;
   popupDuration: number;
@@ -23,6 +26,12 @@ export interface AppSettings {
   enableSound: boolean;
   hasCompletedOnboarding: boolean;
   vaultPath: string;
+  // SRS / tutor settings
+  cefrLevel: CefrLevel;
+  dailyNewWordGoal: number;
+  exerciseMix: ExerciseMix;
+  reviewBatchSize: number; // max cards per review session
+  disabledExerciseTypes: ExerciseType[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -34,6 +43,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   enableSound: true,
   hasCompletedOnboarding: false,
   vaultPath: "",
+  cefrLevel: "B1",
+  dailyNewWordGoal: 10,
+  exerciseMix: "balanced",
+  reviewBatchSize: 20,
+  disabledExerciseTypes: [],
 };
 
 export interface UserStats {

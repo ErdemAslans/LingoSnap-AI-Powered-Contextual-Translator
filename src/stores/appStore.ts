@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AppSettings, TranslationEntry, TranslationResult, UserStats } from "../types";
 import { DEFAULT_SETTINGS, DEFAULT_STATS, getTodayString } from "../types";
+import type { GeneratedExercise, WordCard } from "../types/srs";
 
 interface AppState {
   // Settings
@@ -33,6 +34,23 @@ interface AppState {
   setStats: (stats: UserStats) => void;
   loadStats: (stats: UserStats) => void;
   incrementTranslation: () => void;
+
+  // SRS — Word/phrase cards
+  cards: WordCard[];
+  setCards: (cards: WordCard[]) => void;
+  upsertCardLocal: (card: WordCard) => void;
+  removeCardLocal: (id: string) => void;
+
+  // SRS — Active review session
+  reviewQueue: string[]; // card ids
+  reviewIndex: number;
+  currentExercise: GeneratedExercise | null;
+  reviewActive: boolean;
+  reviewStartedAt: number;
+  startReviewSession: (cardIds: string[]) => void;
+  setCurrentExercise: (e: GeneratedExercise | null) => void;
+  advanceReview: () => void;
+  endReviewSession: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -87,12 +105,11 @@ export const useAppStore = create<AppState>((set) => ({
 
       let newStreak = stats.currentStreak;
       if (isNewDay) {
-        if (isConsecutiveDay) {
-          newStreak = stats.currentStreak + 1;
-        } else if (stats.lastActiveDate !== today) {
-          // Reset streak if more than 1 day gap
-          newStreak = stats.lastActiveDate ? 1 : 1;
-        }
+        // First-ever translation or consecutive day → extend streak.
+        // Otherwise (gap of 2+ days) → restart streak at 1.
+        newStreak = !stats.lastActiveDate || isConsecutiveDay
+          ? stats.currentStreak + 1
+          : 1;
       }
 
       return {
@@ -107,4 +124,48 @@ export const useAppStore = create<AppState>((set) => ({
       };
     });
   },
+
+  // SRS Cards
+  cards: [],
+  setCards: (cards) => set({ cards }),
+  upsertCardLocal: (card) =>
+    set((state) => {
+      const idx = state.cards.findIndex((c) => c.id === card.id);
+      if (idx >= 0) {
+        const next = state.cards.slice();
+        next[idx] = card;
+        return { cards: next };
+      }
+      return { cards: [card, ...state.cards] };
+    }),
+  removeCardLocal: (id) =>
+    set((state) => ({ cards: state.cards.filter((c) => c.id !== id) })),
+
+  // Review session
+  reviewQueue: [],
+  reviewIndex: 0,
+  currentExercise: null,
+  reviewActive: false,
+  reviewStartedAt: 0,
+  startReviewSession: (cardIds) =>
+    set({
+      reviewQueue: cardIds,
+      reviewIndex: 0,
+      currentExercise: null,
+      reviewActive: cardIds.length > 0,
+      reviewStartedAt: Date.now(),
+    }),
+  setCurrentExercise: (e) => set({ currentExercise: e }),
+  advanceReview: () =>
+    set((state) => ({
+      reviewIndex: state.reviewIndex + 1,
+      currentExercise: null,
+    })),
+  endReviewSession: () =>
+    set({
+      reviewQueue: [],
+      reviewIndex: 0,
+      currentExercise: null,
+      reviewActive: false,
+    }),
 }));

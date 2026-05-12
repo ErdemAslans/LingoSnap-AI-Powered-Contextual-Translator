@@ -4,7 +4,7 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
+| 2.x.x   | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
@@ -13,7 +13,7 @@ We take security seriously. If you discover a security vulnerability within Ling
 ### How to Report
 
 1. **DO NOT** open a public GitHub issue for security vulnerabilities
-2. Email your findings to [your-email@example.com] (replace with your actual email)
+2. Use GitHub's [private vulnerability reporting](https://github.com/ErdemAslans/LingoSnap-AI-Powered-Contextual-Translator/security/advisories/new) to submit your finding privately
 3. Include as much detail as possible:
    - Description of the vulnerability
    - Steps to reproduce
@@ -49,9 +49,12 @@ LingoSnap handles the following data locally:
 
 | Data | Storage Location | Encryption |
 |------|------------------|------------|
-| API Key | Tauri Store (AppData) | OS-level |
-| Translation History | Tauri Store (AppData) | No |
-| Settings | Tauri Store (AppData) | No |
+| API Key | Tauri Store JSON (AppData) | None (filesystem ACL only) |
+| Translation History | Tauri Store JSON (AppData) | None |
+| Settings | Tauri Store JSON (AppData) | None |
+| Vault (translations) | User-selected folder, Markdown files | None |
+
+> Note: The Tauri Store plugin persists data as a plain JSON file under your OS app-data directory. Access is restricted by your user account's filesystem permissions — **the contents themselves are not encrypted**. Keep your machine login secured.
 
 ### What We DON'T Do
 

@@ -17,6 +17,8 @@ import { useAppStore } from "../stores/appStore";
 import { useTranslation } from "../hooks/useTranslation";
 import { speakEnglish, speakTurkish, stop, playSuccessSound } from "../services/tts";
 import { saveHistory } from "../services/storage";
+import ClickableText from "./ClickableText";
+import WordLookupCard from "./WordLookupCard";
 
 export default function TranslationPopup() {
   const { isTranslating, currentTranslation, originalText, error, doTranslate } =
@@ -33,6 +35,7 @@ export default function TranslationPopup() {
   const [speakingOriginal, setSpeakingOriginal] = useState(false);
   const [speakingTranslation, setSpeakingTranslation] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [lookupTarget, setLookupTarget] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get current entry from history to check favorite status
@@ -60,10 +63,10 @@ export default function TranslationPopup() {
     }
   }, [currentTranslation, isTranslating, settings.enableSound]);
 
-  // Auto-dismiss
+  // Auto-dismiss (paused while the word-lookup modal is open)
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (!isPinned && (currentTranslation || error)) {
+    if (!isPinned && !lookupTarget && (currentTranslation || error)) {
       timerRef.current = setTimeout(() => {
         handleClose();
       }, settings.popupDuration * 1000);
@@ -71,7 +74,7 @@ export default function TranslationPopup() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [currentTranslation, error, isPinned, settings.popupDuration]);
+  }, [currentTranslation, error, isPinned, settings.popupDuration, lookupTarget]);
 
   const handleClose = async () => {
     stop(); // Stop any TTS
@@ -248,11 +251,11 @@ export default function TranslationPopup() {
             {/* Translation Result */}
             {currentTranslation && !isTranslating && (
               <div className="space-y-4">
-                {/* Original Text */}
+                {/* Original Text — clickable words for deck-add */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
-                      İngilizce
+                      İngilizce <span className="ml-1 text-zinc-600 normal-case">· tıkla veya sürükle</span>
                     </span>
                     {settings.enableTTS && (
                       <button
@@ -268,9 +271,12 @@ export default function TranslationPopup() {
                       </button>
                     )}
                   </div>
-                  <p className="text-sm text-zinc-300 leading-relaxed bg-zinc-800/50 rounded-lg px-3 py-2 whitespace-pre-wrap max-h-32 overflow-y-auto">
-                    {originalText}
-                  </p>
+                  <div className="text-sm text-zinc-300 leading-relaxed bg-zinc-800/50 rounded-lg px-3 py-2 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                    <ClickableText
+                      text={originalText}
+                      onSelectToken={(selected) => setLookupTarget(selected)}
+                    />
+                  </div>
                 </div>
 
                 {/* Arrow Divider */}
@@ -392,6 +398,15 @@ export default function TranslationPopup() {
           to { width: 0%; }
         }
       `}</style>
+
+      {lookupTarget && (
+        <WordLookupCard
+          text={lookupTarget}
+          contextSentence={originalText}
+          translationEntryId={currentEntry?.id}
+          onClose={() => setLookupTarget(null)}
+        />
+      )}
     </div>
   );
 }

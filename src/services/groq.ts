@@ -1,7 +1,55 @@
 import type { TranslationResult } from "../types";
 
-const API_BASE = "https://api.groq.com/openai/v1";
-const MODEL = "llama-3.3-70b-versatile";
+export const API_BASE = "https://api.groq.com/openai/v1";
+export const MODEL = "llama-3.3-70b-versatile";
+
+/**
+ * Low-level JSON chat helper. Returns parsed JSON object from a single Groq
+ * completion with `response_format: json_object`. Caller is responsible for
+ * shaping the prompt to produce valid JSON.
+ */
+export async function chatJson<T = unknown>(
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  opts: { temperature?: number; maxTokens?: number } = {}
+): Promise<T> {
+  const res = await fetch(`${API_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: opts.temperature ?? 0.4,
+      max_tokens: opts.maxTokens ?? 1500,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    const msg = errData.error?.message || `Groq API error ${res.status}`;
+    if (res.status === 401) {
+      throw new Error("API anahtarı geçersiz. Lütfen Groq Console'dan yeni bir anahtar alın.");
+    }
+    if (res.status === 429) throw new Error("Çok fazla istek. Biraz bekleyin.");
+    if (res.status >= 500) throw new Error("Groq sunucusu meşgul. Biraz bekleyin.");
+    throw new Error(msg);
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty response from Groq");
+  return JSON.parse(content) as T;
+}
 
 interface GroqResponse {
   choices: Array<{

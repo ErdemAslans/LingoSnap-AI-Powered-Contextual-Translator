@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
-import { translateText, type TranslationContext } from "../services/gemini";
+import { translateText, type TranslationContext } from "../services/groq";
 import { generateId } from "../utils/helpers";
-import { saveHistory, saveStats } from "../services/storage";
+import { loadSettings, saveHistory, saveStats } from "../services/storage";
 import { saveToVault, getRecentTranslations } from "../services/vault";
 
 export function useTranslation() {
@@ -50,6 +50,12 @@ export function useTranslation() {
     await invoke("show_translation_popup");
 
     try {
+      // ALWAYS read freshest settings from the Tauri store. Each Tauri window has
+      // its own Zustand instance, so the popup's in-memory `settings` may still
+      // hold defaults while the async load is in flight — which would surface as
+      // a spurious "API key required" error.
+      const freshSettings = await loadSettings();
+
       const text: string = await invoke("get_clipboard_text");
 
       if (!text || !text.trim()) {
@@ -69,7 +75,7 @@ export function useTranslation() {
         }
       }
 
-      if (!settings.apiKey || settings.apiKey.trim() === "") {
+      if (!freshSettings.apiKey || freshSettings.apiKey.trim() === "") {
         setError("API key is required. Please set your Groq API key in settings.");
         return;
       }
@@ -77,7 +83,7 @@ export function useTranslation() {
       // Build RAG context from vault
       const context = await buildContext();
 
-      const result = await translateText(trimmed, settings.apiKey, context);
+      const result = await translateText(trimmed, freshSettings.apiKey, context);
       setTranslation(trimmed, result);
       lastTranslatedText.current = trimmed;
 
@@ -92,7 +98,7 @@ export function useTranslation() {
       addHistoryEntry(entry);
       incrementTranslation();
 
-      const limit = settings.historyLimit;
+      const limit = freshSettings.historyLimit;
       const trimmedHistory = [entry, ...history].slice(0, limit);
       await saveHistory(trimmedHistory);
 
@@ -100,8 +106,8 @@ export function useTranslation() {
       await saveStats(currentStats);
 
       // Save to vault (fire and forget)
-      if (settings.vaultPath) {
-        saveToVault(settings.vaultPath, entryId, trimmed, result).catch((e) =>
+      if (freshSettings.vaultPath) {
+        saveToVault(freshSettings.vaultPath, entryId, trimmed, result).catch((e) =>
           console.error("[Vault] Save error:", e)
         );
       }
@@ -111,7 +117,7 @@ export function useTranslation() {
     } finally {
       await invoke("set_translating_state", { translating: false });
     }
-  }, [settings, setTranslating, setTranslation, setError, addHistoryEntry, incrementTranslation, history, buildContext]);
+  }, [setTranslating, setTranslation, setError, addHistoryEntry, incrementTranslation, history, buildContext]);
 
   useEffect(() => {
     const unlisten = listen("translate-hotkey", () => {

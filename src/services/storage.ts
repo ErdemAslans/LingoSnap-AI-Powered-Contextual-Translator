@@ -1,6 +1,7 @@
 import { Store } from "@tauri-apps/plugin-store";
 import type { AppSettings, TranslationEntry, UserStats } from "../types";
 import { DEFAULT_SETTINGS, DEFAULT_STATS } from "../types";
+import type { WordCard } from "../types/srs";
 
 let store: Store | null = null;
 
@@ -43,5 +44,17 @@ export async function loadStats(): Promise<UserStats> {
 export async function saveStats(stats: UserStats): Promise<void> {
   const s = await getStore();
   await s.set("stats", stats);
+  await s.save();
+}
+
+// SRS cards — also persisted to Tauri Store for fast warm-start without hitting the vault.
+export async function loadCards(): Promise<WordCard[]> {
+  const s = await getStore();
+  return (await s.get<WordCard[]>("cards")) ?? [];
+}
+
+export async function saveCards(cards: WordCard[]): Promise<void> {
+  const s = await getStore();
+  await s.set("cards", cards);
   await s.save();
 }

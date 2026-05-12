@@ -117,7 +117,7 @@ export default function HistoryWindow() {
             <p className="text-xs text-zinc-600 mt-1">
               {filter === "favorites"
                 ? "Çevirileri yıldızlayarak favorilere ekle"
-                : !search && "Ctrl+Shift+C ile ilk çevirini yap!"}
+                : !search && "Bir metin seçerek ilk çevirini yap!"}
             </p>
           </div>
         ) : (

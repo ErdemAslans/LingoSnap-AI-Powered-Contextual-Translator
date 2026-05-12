@@ -29,7 +29,7 @@ Feature requests are welcome! Please provide:
 
 ### Pull Requests
 
-1. Fork the repo and create your branch from `main`
+1. Fork the repo and create your branch from the default branch
 2. Make your changes
 3. Ensure the code builds without errors
 4. Test your changes thoroughly
@@ -48,8 +48,8 @@ Feature requests are welcome! Please provide:
 
 ```bash
 # Clone your fork
-git clone https://github.com/your-username/lingosnap.git
-cd lingosnap
+git clone https://github.com/<your-username>/LingoSnap-AI-Powered-Contextual-Translator.git
+cd LingoSnap-AI-Powered-Contextual-Translator
 
 # Install dependencies
 npm install
@@ -61,21 +61,25 @@ npm run tauri dev
 ### Project Structure
 
 ```
-lingosnap/
+LingoSnap-AI-Powered-Contextual-Translator/
 ├── src/                    # React frontend
-│   ├── components/         # UI components
-│   ├── hooks/              # Custom React hooks
-│   ├── services/           # API and utility services
+│   ├── components/         # UI components (TranslationPopup, SettingsWindow, HistoryWindow)
+│   ├── hooks/              # Custom React hooks (useTranslation, useSettings, useHistory)
+│   ├── services/           # API/utility services (groq, storage, tts, vault)
 │   ├── stores/             # Zustand state management
-│   └── types/              # TypeScript types
-├── src-tauri/              # Rust backend
-│   └── src/
-│       ├── commands.rs     # Tauri commands
-│       ├── clipboard.rs    # Clipboard handling
-│       ├── hotkey.rs       # Global hotkey
-│       ├── tray.rs         # System tray
-│       └── window.rs       # Window management
-└── public/                 # Static assets
+│   ├── types/              # TypeScript types
+│   └── utils/              # Helpers (id generation, export)
+└── src-tauri/              # Rust backend
+    ├── src/
+    │   ├── lib.rs          # Tauri builder, plugin registration
+    │   ├── main.rs         # Entry point
+    │   ├── commands.rs     # Tauri commands (IPC)
+    │   ├── clipboard.rs    # Clipboard handling
+    │   ├── mouse_hook.rs   # Windows low-level mouse hook (auto-selection)
+    │   ├── tray.rs         # System tray
+    │   └── window.rs       # Popup positioning
+    ├── capabilities/       # Tauri ACL permissions
+    └── tauri.conf.json     # Tauri configuration
 ```
 
 ### Code Style
