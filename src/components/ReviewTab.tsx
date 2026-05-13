@@ -4,7 +4,7 @@
 //   3. When queue is exhausted, show summary.
 
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Sparkles, Flame, CheckCircle2, AlertTriangle, Loader2, RotateCw } from "lucide-react";
+import { BookOpen, Sparkles, Flame, CheckCircle2, AlertTriangle, Loader2, RotateCw, Plus } from "lucide-react";
 import { useSRS } from "../hooks/useSRS";
 import { useAppStore } from "../stores/appStore";
 import { saveCards } from "../services/storage";
@@ -12,6 +12,7 @@ import { applyRating } from "../services/fsrs";
 import { upsertCard as vaultUpsert, appendDailyReview } from "../services/srs-vault";
 import { evaluateAnswer } from "../services/tutor";
 import ReviewCard from "./ReviewCard";
+import AddCardModal from "./AddCardModal";
 import type { GeneratedExercise, ReviewLogEntry, WordCard } from "../types/srs";
 
 type SessionPhase = "idle" | "loading" | "active" | "summary" | "error";
@@ -31,6 +32,7 @@ export default function ReviewTab() {
   const { getDueQueue, buildExerciseFor, stats } = useSRS();
 
   const [phase, setPhase] = useState<SessionPhase>("idle");
+  const [showAddCard, setShowAddCard] = useState(false);
   const [queue, setQueue] = useState<WordCard[]>([]);
   const [idx, setIdx] = useState(0);
   const [currentCard, setCurrentCard] = useState<WordCard | null>(null);
@@ -291,7 +293,9 @@ export default function ReviewTab() {
           className="w-full flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-4 text-base font-semibold text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {srsStats.totalCards === 0 ? (
-            "Henüz kart yok — bir çevirideki kelimeye tıkla"
+            <>
+              <Plus size={18} /> Aşağıdan kelime ekleyerek başla
+            </>
           ) : due > 0 ? (
             <>
               <Sparkles size={18} /> {due} Kartı Tekrarla
@@ -303,6 +307,13 @@ export default function ReviewTab() {
           )}
         </button>
 
+        <button
+          onClick={() => setShowAddCard(true)}
+          className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/50 px-6 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-900 hover:border-zinc-600 transition-colors"
+        >
+          <Plus size={16} /> Yeni Kart Ekle (manuel)
+        </button>
+
         {phase === "summary" && result.reviewed > 0 && (
           <button
             onClick={() => setPhase("idle")}
@@ -311,6 +322,8 @@ export default function ReviewTab() {
             <RotateCw size={14} /> Yeni oturum
           </button>
         )}
+
+        {showAddCard && <AddCardModal onClose={() => setShowAddCard(false)} />}
       </div>
     );
   }
