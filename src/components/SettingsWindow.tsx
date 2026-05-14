@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import ReviewTab from "./ReviewTab";
 import { CEFR_LEVELS, type CefrLevel } from "../types/srs";
+import { maybeFireDailyReviewToast } from "../services/notifications";
 
 type Tab = "settings" | "history" | "review";
 type HistoryFilter = "all" | "favorites";
@@ -389,6 +390,12 @@ export default function SettingsWindow() {
       unlisten.then((fn) => fn());
     };
   }, []);
+
+  // Fire one toast per day when the user opens the app and has due cards.
+  useEffect(() => {
+    if (!isLoaded) return;
+    void maybeFireDailyReviewToast(dueToday);
+  }, [isLoaded, dueToday]);
 
   const handleOnboardingComplete = async (apiKey: string, vaultPath: string, cefrLevel: CefrLevel) => {
     await updateSettings({

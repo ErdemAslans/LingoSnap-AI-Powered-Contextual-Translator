@@ -11,9 +11,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Volume2, Loader2, Check, X, ChevronRight, Star, AlertCircle } from "lucide-react";
 import { previewIntervals } from "../services/fsrs";
 import { speakEnglish } from "../services/tts";
+import ReadingPassageView from "./ReadingPassageView";
 import type { GeneratedExercise, WordCard } from "../types/srs";
 
-type Phase = "answering" | "evaluating" | "feedback" | "done";
+type Phase = "calibrating" | "answering" | "evaluating" | "feedback" | "done";
 
 interface Props {
   card: WordCard;
@@ -21,6 +22,7 @@ interface Props {
   onSubmit: (args: {
     userAnswer: string;
     timeSpentMs: number;
+    confidenceBefore?: number;
   }) => Promise<{ rating: 1 | 2 | 3 | 4; feedback: string; modelAnswer?: string }>;
   onRated: (finalRating: 1 | 2 | 3 | 4) => void;
 }
@@ -40,7 +42,8 @@ function formatInterval(days: number): string {
 }
 
 export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props) {
-  const [phase, setPhase] = useState<Phase>("answering");
+  const [phase, setPhase] = useState<Phase>("calibrating");
+  const [confidence, setConfidence] = useState<number>(50);
   const [userAnswer, setUserAnswer] = useState("");
   const [showHint, setShowHint] = useState(false);
   const [suggestedRating, setSuggestedRating] = useState<1 | 2 | 3 | 4 | null>(null);
@@ -72,6 +75,7 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
       const result = await onSubmit({
         userAnswer,
         timeSpentMs: Date.now() - startedAt.current,
+        confidenceBefore: confidence,
       });
       setSuggestedRating(result.rating);
       setFeedback(result.feedback);
@@ -82,6 +86,12 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
       setPhase("answering");
     }
   };
+
+  const confidenceLabel = (v: number) =>
+    v < 20 ? "Hiç emin değilim" :
+    v < 40 ? "Emin değilim" :
+    v < 60 ? "Belki" :
+    v < 80 ? "Sanırım biliyorum" : "Çok eminim";
 
   const handleRate = (rating: 1 | 2 | 3 | 4) => {
     setPhase("done");
@@ -129,6 +139,36 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
             </div>
           </div>
         );
+
+      case "reading_passage_mcq": {
+        return (
+          <ReadingPassageView
+            exercise={e}
+            disabled={phase !== "answering"}
+            onComplete={async (res) => {
+              // Encode the result so the standard onSubmit pipeline knows the score.
+              const encoded = `score:${res.correctCount}/${res.total}`;
+              setUserAnswer(encoded);
+              // Trigger evaluation immediately.
+              setPhase("evaluating");
+              try {
+                const result = await onSubmit({
+                  userAnswer: encoded,
+                  timeSpentMs: Date.now() - startedAt.current,
+                  confidenceBefore: confidence,
+                });
+                setSuggestedRating(result.rating);
+                setFeedback(result.feedback);
+                setModelAnswer(result.modelAnswer);
+                setPhase("feedback");
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Değerlendirme başarısız");
+                setPhase("answering");
+              }
+            }}
+          />
+        );
+      }
 
       case "yokdil_mcq": {
         const letters = ["A", "B", "C", "D", "E"];
@@ -278,13 +318,56 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
         </div>
       </div>
 
-      {/* Prompt */}
-      <div className="space-y-1">
-        <p className="text-sm font-medium text-zinc-300">{exercise.prompt}</p>
-      </div>
+      {phase === "calibrating" ? (
+        <div className="space-y-4">
+          {card.commonMistakes.length > 0 && (
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 px-3 py-2 text-xs text-orange-200">
+              ⚠️ Bu kartla daha önce yaşadığın hata: <span className="text-white">{card.commonMistakes[card.commonMistakes.length - 1].replace(/^\[.+?\]\s*/, "")}</span>
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-medium text-zinc-200 mb-2">
+              Cevap vermeden önce: bu kelimeyi ne kadar iyi biliyorsun?
+            </p>
+            <p className="text-xs text-zinc-500 mb-3">
+              Kendine dürüst ol — sistem zaman içinde fazla güven / yetersiz güven kalıplarını takip ediyor.
+            </p>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={confidence}
+              onChange={(e) => setConfidence(parseInt(e.target.value))}
+              className="w-full accent-white"
+            />
+            <div className="flex items-center justify-between text-xs mt-1">
+              <span className="text-zinc-500">0</span>
+              <span className="text-zinc-300 font-medium">
+                {confidence} — {confidenceLabel(confidence)}
+              </span>
+              <span className="text-zinc-500">100</span>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              startedAt.current = Date.now();
+              setPhase("answering");
+            }}
+            className="w-full rounded-lg bg-white px-4 py-3 text-sm font-semibold text-black hover:bg-zinc-200"
+          >
+            Soruyu Gör
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Prompt */}
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-zinc-300">{exercise.prompt}</p>
+          </div>
 
-      {/* Exercise body */}
-      {renderExerciseBody()}
+          {/* Exercise body */}
+          {renderExerciseBody()}
 
       {/* Hint */}
       {exercise.hint && (
@@ -313,7 +396,7 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
       )}
 
       {/* Action row — phase dependent */}
-      {phase === "answering" && (
+      {phase === "answering" && exercise.exerciseType !== "reading_passage_mcq" && (
         <div className="flex gap-2">
           <button
             onClick={handleSkip}
@@ -436,6 +519,8 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

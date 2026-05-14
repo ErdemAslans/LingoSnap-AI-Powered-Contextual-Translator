@@ -13,7 +13,10 @@ import { upsertCard as vaultUpsert, appendDailyReview } from "../services/srs-va
 import { evaluateAnswer } from "../services/tutor";
 import ReviewCard from "./ReviewCard";
 import AddCardModal from "./AddCardModal";
-import type { GeneratedExercise, ReviewLogEntry, WordCard } from "../types/srs";
+import BulkImportModal from "./BulkImportModal";
+import ErrorJournalPanel from "./ErrorJournalPanel";
+import MockExamView from "./MockExamView";
+import type { GeneratedExercise, MisconceptionCategory, ReviewLogEntry, WordCard } from "../types/srs";
 
 type SessionPhase = "idle" | "loading" | "active" | "summary" | "error";
 
@@ -33,6 +36,8 @@ export default function ReviewTab() {
 
   const [phase, setPhase] = useState<SessionPhase>("idle");
   const [showAddCard, setShowAddCard] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showMockExam, setShowMockExam] = useState(false);
   const [queue, setQueue] = useState<WordCard[]>([]);
   const [idx, setIdx] = useState(0);
   const [currentCard, setCurrentCard] = useState<WordCard | null>(null);
@@ -45,6 +50,8 @@ export default function ReviewTab() {
     suggestedRating?: 1 | 2 | 3 | 4;
     feedback?: string;
     modelAnswer?: string;
+    misconception?: { category: MisconceptionCategory; label: string };
+    confidenceBefore?: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SessionResult>({ reviewed: 0, correct: 0, partial: 0, incorrect: 0 });
@@ -94,7 +101,7 @@ export default function ReviewTab() {
   // For yokdil_mcq we short-circuit the LLM round trip: the correct answer is
   // already known (expectedAnswer) and the structured analysis (TR translation,
   // key insight, distractor explanations) was produced at generation time.
-  const onCheckAnswer = async (args: { userAnswer: string; timeSpentMs: number }) => {
+  const onCheckAnswer = async (args: { userAnswer: string; timeSpentMs: number; confidenceBefore?: number }) => {
     if (!currentCard || !currentExercise) throw new Error("No active card");
 
     if (currentExercise.exerciseType === "yokdil_mcq") {
@@ -114,9 +121,34 @@ export default function ReviewTab() {
         suggestedRating: rating,
         feedback,
         modelAnswer: expected,
+        confidenceBefore: args.confidenceBefore,
       });
 
       return { rating, feedback, modelAnswer: expected };
+    }
+
+    if (currentExercise.exerciseType === "reading_passage_mcq") {
+      // userAnswer is encoded as "score:N/M" by ReadingPassageView.
+      const m = /^score:(\d+)\/(\d+)$/.exec(args.userAnswer.trim());
+      const correctCount = m ? parseInt(m[1]) : 0;
+      const total = m ? parseInt(m[2]) : 3;
+      const pct = total === 0 ? 0 : correctCount / total;
+      const rating: 1 | 2 | 3 | 4 =
+        pct >= 1 ? 4 : pct >= 2 / 3 ? 3 : pct >= 1 / 3 ? 2 : 1;
+      const feedback = `${correctCount}/${total} doğru.`;
+
+      setPendingEvalFor({
+        card: currentCard,
+        exercise: currentExercise,
+        userAnswer: args.userAnswer,
+        timeSpentMs: args.timeSpentMs,
+        suggestedRating: rating,
+        feedback,
+        modelAnswer: undefined,
+        confidenceBefore: args.confidenceBefore,
+      });
+
+      return { rating, feedback, modelAnswer: undefined };
     }
 
     const evalResult = await evaluateAnswer(settings.apiKey, {
@@ -138,6 +170,8 @@ export default function ReviewTab() {
       suggestedRating: evalResult.rating,
       feedback: evalResult.feedback,
       modelAnswer: evalResult.modelAnswer,
+      misconception: evalResult.misconception,
+      confidenceBefore: args.confidenceBefore,
     });
 
     return {
@@ -171,13 +205,25 @@ export default function ReviewTab() {
       feedback: p.feedback,
       timeSpentMs: p.timeSpentMs,
       stateBefore,
+      confidenceBefore: p.confidenceBefore,
+      misconception: p.misconception,
     };
+
+    // Append misconception to card.commonMistakes (dedup by lowercased label).
+    let nextMistakes = p.card.commonMistakes;
+    if (p.misconception && finalRating < 3) {
+      const tag = `[${p.misconception.category}] ${p.misconception.label}`;
+      if (!nextMistakes.some((m) => m.toLowerCase() === tag.toLowerCase())) {
+        nextMistakes = [...nextMistakes, tag].slice(-10);
+      }
+    }
 
     const updated: WordCard = {
       ...p.card,
       fsrs: newFsrs,
       reviews: [...p.card.reviews, review],
       recentExerciseTypes: [...p.card.recentExerciseTypes.slice(-4), p.exercise.exerciseType],
+      commonMistakes: nextMistakes,
       updatedAt: Date.now(),
     };
 
@@ -331,12 +377,27 @@ export default function ReviewTab() {
           )}
         </button>
 
-        <button
-          onClick={() => setShowAddCard(true)}
-          className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/50 px-6 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-900 hover:border-zinc-600 transition-colors"
-        >
-          <Plus size={16} /> Yeni Kart Ekle (manuel)
-        </button>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <button
+            onClick={() => setShowAddCard(true)}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900/50 px-2 py-3 text-xs font-medium text-zinc-200 hover:bg-zinc-900 hover:border-zinc-600 transition-colors"
+          >
+            <Plus size={14} /> Kart
+          </button>
+          <button
+            onClick={() => setShowBulkImport(true)}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900/50 px-2 py-3 text-xs font-medium text-zinc-200 hover:bg-zinc-900 hover:border-zinc-600 transition-colors"
+          >
+            <Plus size={14} /> Toplu
+          </button>
+          <button
+            onClick={() => setShowMockExam(true)}
+            disabled={srsStats.totalCards < 5}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-purple-700/40 bg-purple-500/10 px-2 py-3 text-xs font-medium text-purple-200 hover:bg-purple-500/20 disabled:opacity-50 transition-colors"
+          >
+            🎯 Sınav
+          </button>
+        </div>
 
         {phase === "summary" && result.reviewed > 0 && (
           <button
@@ -347,7 +408,13 @@ export default function ReviewTab() {
           </button>
         )}
 
+        <div className="mt-6">
+          <ErrorJournalPanel />
+        </div>
+
         {showAddCard && <AddCardModal onClose={() => setShowAddCard(false)} />}
+        {showBulkImport && <BulkImportModal onClose={() => setShowBulkImport(false)} />}
+        {showMockExam && <MockExamView onClose={() => setShowMockExam(false)} />}
       </div>
     );
   }

@@ -28,6 +28,7 @@ const MIX_WEIGHTS: Record<ExerciseMix, Record<ExerciseType, number>> = {
     synonym_or_antonym: 1.0,
     context_inference: 1.2,
     yokdil_mcq: 2.0,
+    reading_passage_mcq: 0.6,
   },
   production_heavy: {
     recall_en_to_tr: 0.4,
@@ -39,6 +40,7 @@ const MIX_WEIGHTS: Record<ExerciseMix, Record<ExerciseType, number>> = {
     synonym_or_antonym: 1.2,
     context_inference: 1.5,
     yokdil_mcq: 1.5,
+    reading_passage_mcq: 0.4,
   },
   recognition_heavy: {
     recall_en_to_tr: 2.0,
@@ -50,6 +52,7 @@ const MIX_WEIGHTS: Record<ExerciseMix, Record<ExerciseType, number>> = {
     synonym_or_antonym: 0.8,
     context_inference: 1.5,
     yokdil_mcq: 3.0,
+    reading_passage_mcq: 1.5,
   },
 };
 
@@ -117,6 +120,15 @@ interface ExerciseResponse {
   yokdilTranslation?: string;
   yokdilKeyInsight?: string;
   yokdilDistractorAnalysis?: Array<{ option: string; whyWrong: string }>;
+  // reading_passage_mcq enriched fields
+  passage?: string;
+  passageTranslation?: string;
+  passageQuestions?: Array<{
+    prompt: string;
+    options: string[];
+    expectedAnswer: string;
+    whyCorrect: string;
+  }>;
 }
 
 const TYPE_INSTRUCTIONS: Record<ExerciseType, (card: WordCard, cefr: CefrLevel) => string> = {
@@ -179,6 +191,33 @@ Ask the learner what "${card.text}" means in this sentence (Turkish answer).
 Set "expectedAnswer" to a Turkish gloss matching the meaning used.
 Put the English sentence in "contextSentence".
 "prompt" in Turkish.`,
+
+  reading_passage_mcq: (card, cefr) =>
+    `Type: reading_passage_mcq (YÖKDİL/YDS-style reading comprehension).
+Write a NEW academic English passage of 100-150 words at CEFR ${cefr}. The passage MUST naturally use "${card.text}" once in its primary sense.
+Then write THREE 5-option (A-E) multiple-choice questions about the passage. Question 1: detail. Question 2: inference. Question 3: main idea OR vocabulary-in-context (about "${card.text}" specifically).
+
+Return JSON with this shape:
+{
+  "prompt": "Aşağıdaki parçayı okuyup soruları yanıtla.",
+  "passage": "100-150 word English passage with the target embedded.",
+  "passageTranslation": "Tam Türkçe çeviri.",
+  "passageQuestions": [
+    {
+      "prompt": "English question stem.",
+      "options": ["A...", "B...", "C...", "D...", "E..."],
+      "expectedAnswer": "exact match to one of the options",
+      "whyCorrect": "Türkçe 1 cümle gerekçe"
+    },
+    { ... },
+    { ... }
+  ]
+}
+Rules:
+- 5 options per question (exactly).
+- Distractors: plausible but refutable from the passage.
+- Each option is character-identical between options[] and expectedAnswer.
+- JSON only.`,
 
   yokdil_mcq: (card, cefr) => {
     const pos = (card.partOfSpeech || "").toLowerCase();
@@ -251,9 +290,10 @@ Rules:
 - No empty praise in any field.
 - JSON only.`;
 
+  const tokenBudget = exerciseType === "reading_passage_mcq" ? 2000 : 700;
   const parsed = await chatJson<ExerciseResponse>(apiKey, EXERCISE_SYSTEM, userPrompt, {
     temperature: 0.7,
-    maxTokens: 700,
+    maxTokens: tokenBudget,
   });
 
   return {
@@ -270,5 +310,8 @@ Rules:
     yokdilTranslation: parsed.yokdilTranslation,
     yokdilKeyInsight: parsed.yokdilKeyInsight,
     yokdilDistractorAnalysis: parsed.yokdilDistractorAnalysis,
+    passage: parsed.passage,
+    passageTranslation: parsed.passageTranslation,
+    passageQuestions: parsed.passageQuestions,
   };
 }

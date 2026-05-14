@@ -7,6 +7,7 @@ import type {
   EvaluationResult,
   ExerciseType,
   LexicalKind,
+  MisconceptionCategory,
   WordLookup,
 } from "../types/srs";
 
@@ -109,6 +110,7 @@ interface EvalResponse {
   rating: 1 | 2 | 3 | 4;
   feedback: string;
   modelAnswer?: string;
+  misconception?: { category: MisconceptionCategory; label: string };
 }
 
 export async function evaluateAnswer(
@@ -142,8 +144,17 @@ Return JSON:
   "evaluation": "correct" | "partial" | "incorrect",
   "rating": 1 | 2 | 3 | 4,
   "feedback": "1-2 sentence pedagogical feedback. NO sycophancy. Be specific.",
-  "modelAnswer": "the ideal answer (shown to learner after rating)"
+  "modelAnswer": "the ideal answer (shown to learner after rating)",
+  "misconception": null OR {
+    "category": "false_friend" | "register" | "polysemy" | "collocation" | "preposition" | "grammar_pattern" | "morphology" | "spelling" | "semantic_neighbor" | "other",
+    "label": "kısa Türkçe etiket — örn 'consist of/from karışıklığı', 'gerund vs to-infinitive'"
+  }
 }
+
+When to set "misconception":
+- Only when evaluation is "partial" or "incorrect".
+- Pick the category that best matches the underlying error type. Leave null otherwise.
+- "label" must be specific enough to retrieve this pattern in a future session.
 
 Rating semantics (Anki-style):
 - 1 (Again): wrong or blank — schedule soon.
@@ -173,6 +184,7 @@ Rules:
     rating,
     feedback,
     modelAnswer: parsed.modelAnswer,
+    misconception: parsed.misconception ?? undefined,
   };
 }
 
@@ -186,4 +198,52 @@ function stripSycophancy(s: string): string {
     out = out.replace(p, "").trimStart();
   }
   return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
+// ---------- Bulk vocabulary extraction ----------
+
+const EXTRACT_SYSTEM = `You are an English vocabulary curator for a Turkish learner.
+Given a chunk of text (article, exam passage, paste of a word list, etc.) extract the
+words and multi-word phrases the learner most likely needs to study. Skip trivial
+high-frequency words (the, and, is, etc.). Output ONLY valid JSON.`;
+
+interface ExtractResponse {
+  items: Array<{
+    text: string;
+    kind: LexicalKind;
+    rationale: string; // 1-line TR explanation why this is worth learning
+  }>;
+}
+
+export async function extractVocabularyFromText(
+  apiKey: string,
+  rawText: string,
+  cefrLevel: CefrLevel,
+  maxItems: number = 20
+): Promise<Array<{ text: string; kind: LexicalKind; rationale: string }>> {
+  const userPrompt = `Extract up to ${maxItems} English words/phrases worth studying for a CEFR ${cefrLevel} learner.
+
+Source text:
+"""${rawText.slice(0, 4000)}"""
+
+Rules:
+- Include single words AND multi-word phrases (idioms, collocations, phrasal verbs, connectors).
+- Skip very high-frequency words (top 1000) unless they appear in a non-obvious sense.
+- Prefer NAWL/AWL academic vocabulary if the text is academic.
+- If the user pasted a bare list (one word per line), KEEP every distinct item — do not filter.
+- Each "rationale" is ONE Turkish sentence explaining why it's worth studying.
+
+Return JSON:
+{
+  "items": [
+    { "text": "...", "kind": "word" | "phrase", "rationale": "..." }
+  ]
+}
+JSON only.`;
+
+  const parsed = await chatJson<ExtractResponse>(apiKey, EXTRACT_SYSTEM, userPrompt, {
+    temperature: 0.3,
+    maxTokens: 1800,
+  });
+  return parsed.items ?? [];
 }

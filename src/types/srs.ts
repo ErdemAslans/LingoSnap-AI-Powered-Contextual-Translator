@@ -16,7 +16,8 @@ export type ExerciseType =
   | "listen_and_type" // TTS audio, type what was heard
   | "synonym_or_antonym" // produce a synonym or antonym
   | "context_inference" // infer meaning from a never-seen sentence
-  | "yokdil_mcq"; // YÖKDİL-style 5-option multiple choice with structured analysis
+  | "yokdil_mcq" // YÖKDİL-style 5-option multiple choice with structured analysis
+  | "reading_passage_mcq"; // 100-150 word academic passage + 3 chained MCQs
 
 export const EXERCISE_TYPES: ExerciseType[] = [
   "recall_en_to_tr",
@@ -28,7 +29,16 @@ export const EXERCISE_TYPES: ExerciseType[] = [
   "synonym_or_antonym",
   "context_inference",
   "yokdil_mcq",
+  "reading_passage_mcq",
 ];
+
+// Sub-question for reading_passage_mcq
+export interface PassageQuestion {
+  prompt: string; // Turkish instruction or English question stem
+  options: string[]; // 5 options A-E
+  expectedAnswer: string; // one of options
+  whyCorrect: string; // short Turkish explanation
+}
 
 export interface WordMeaning {
   sense: string; // English gloss (e.g., "to operate a vehicle")
@@ -49,6 +59,18 @@ export interface FsrsState {
   last_review?: string; // ISO timestamp
 }
 
+export type MisconceptionCategory =
+  | "false_friend" // word looks like Turkish "yalancı eş"
+  | "register" // formal/informal mismatch
+  | "polysemy" // wrong sense for context
+  | "collocation" // unnatural word combo
+  | "preposition" // wrong dependent preposition
+  | "grammar_pattern" // tense / aspect / agreement
+  | "morphology" // wrong inflection / part of speech
+  | "spelling" // typo / wrong letters
+  | "semantic_neighbor" // close synonym used incorrectly
+  | "other";
+
 export interface ReviewLogEntry {
   timestamp: number; // ms epoch
   rating: 1 | 2 | 3 | 4; // 1=Again, 2=Hard, 3=Good, 4=Easy
@@ -61,6 +83,12 @@ export interface ReviewLogEntry {
   timeSpentMs: number;
   // FSRS state at time of review (pre-rating)
   stateBefore: FsrsState;
+  // Pedagogical metadata (added v3.2)
+  confidenceBefore?: number; // 0-100 self-rated confidence pre-attempt
+  misconception?: {
+    category: MisconceptionCategory;
+    label: string; // short pattern, e.g. "of/from confusion in 'consist of'"
+  };
 }
 
 export interface WordCard {
@@ -115,6 +143,10 @@ export interface GeneratedExercise {
   yokdilTranslation?: string; // TR translation of the full context sentence
   yokdilKeyInsight?: string; // 1-sentence key pedagogical hook
   yokdilDistractorAnalysis?: Array<{ option: string; whyWrong: string }>;
+  // For reading_passage_mcq
+  passage?: string; // 100-150 word academic English passage
+  passageTranslation?: string; // Turkish translation of the whole passage
+  passageQuestions?: PassageQuestion[]; // 3 chained sub-questions
 }
 
 export interface EvaluationResult {
@@ -122,6 +154,7 @@ export interface EvaluationResult {
   rating: 1 | 2 | 3 | 4; // suggested FSRS rating
   feedback: string; // short pedagogical feedback (no sycophancy)
   modelAnswer?: string; // shown only after rating is committed
+  misconception?: { category: MisconceptionCategory; label: string };
 }
 
 // Lookup card returned when user clicks a word in the popup.
