@@ -18,6 +18,11 @@ static TRANSLATING: AtomicBool = AtomicBool::new(false);
 // that interacting with the popup (clicking words, drag-selecting phrases)
 // does NOT trigger a new translation cycle.
 static POPUP_OPEN: AtomicBool = AtomicBool::new(false);
+// User-controlled master switch. The hook ALWAYS runs (so we can re-enable
+// instantly), but when AUTO_TRANSLATE_ENABLED is false, mouse events pass
+// straight through without ever triggering a translation. Defaults to false
+// so the app starts in a quiet state — the user explicitly clicks "Başlat".
+static AUTO_TRANSLATE_ENABLED: AtomicBool = AtomicBool::new(false);
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 static LAST_TRIGGER_MS: AtomicU64 = AtomicU64::new(0);
@@ -64,6 +69,12 @@ fn cooldown_active(now: u64) -> bool {
 #[cfg(windows)]
 unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 {
+        // Master kill switch: when the user clicked "Durdur" / disabled auto
+        // translate, the hook is a no-op (only forwards events).
+        if !AUTO_TRANSLATE_ENABLED.load(Ordering::Relaxed) {
+            return CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam);
+        }
+
         // If the popup is currently open, we want clicks/drags inside (or anywhere
         // else) to never spawn a new translation. Bail before touching state.
         if POPUP_OPEN.load(Ordering::Relaxed) {
@@ -190,6 +201,18 @@ pub fn set_popup_open(open: bool) {
         // Cancel any debounced trigger that might fire right after the popup appears.
         DEBOUNCE_CANCEL.store(true, Ordering::Relaxed);
     }
+}
+
+pub fn set_auto_translate_enabled(enabled: bool) {
+    AUTO_TRANSLATE_ENABLED.store(enabled, Ordering::Relaxed);
+    if !enabled {
+        // Drop any in-flight debounced trigger so disabling is instant.
+        DEBOUNCE_CANCEL.store(true, Ordering::Relaxed);
+    }
+}
+
+pub fn is_auto_translate_enabled() -> bool {
+    AUTO_TRANSLATE_ENABLED.load(Ordering::Relaxed)
 }
 
 #[cfg(not(windows))]

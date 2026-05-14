@@ -26,6 +26,9 @@ export interface AppSettings {
   enableSound: boolean;
   hasCompletedOnboarding: boolean;
   vaultPath: string;
+  // User-controlled master switch for the global mouse hook.
+  // false = quiet mode, no auto-translation. true = active.
+  autoTranslateEnabled: boolean;
   // SRS / tutor settings
   cefrLevel: CefrLevel;
   dailyNewWordGoal: number;
@@ -43,6 +46,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   enableSound: true,
   hasCompletedOnboarding: false,
   vaultPath: "",
+  autoTranslateEnabled: false,
   cefrLevel: "B1",
   dailyNewWordGoal: 10,
   exerciseMix: "balanced",

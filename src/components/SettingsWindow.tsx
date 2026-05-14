@@ -27,6 +27,8 @@ import {
   MousePointer2,
   BookOpen,
   GraduationCap,
+  Play,
+  Pause,
 } from "lucide-react";
 import ReviewTab from "./ReviewTab";
 import { CEFR_LEVELS, type CefrLevel } from "../types/srs";
@@ -397,6 +399,23 @@ export default function SettingsWindow() {
     void maybeFireDailyReviewToast(dueToday);
   }, [isLoaded, dueToday]);
 
+  // After settings load, sync the master switch to Rust so the hook reflects
+  // the persisted state from a previous session.
+  useEffect(() => {
+    if (!isLoaded) return;
+    void invoke("set_auto_translate_enabled", { enabled: settings.autoTranslateEnabled });
+  }, [isLoaded, settings.autoTranslateEnabled]);
+
+  // Tray toggle reflects back into settings.
+  useEffect(() => {
+    const unlisten = listen<boolean>("auto-translate-changed", (e) => {
+      void updateSettings({ autoTranslateEnabled: e.payload });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [updateSettings]);
+
   const handleOnboardingComplete = async (apiKey: string, vaultPath: string, cefrLevel: CefrLevel) => {
     await updateSettings({
       apiKey,
@@ -418,14 +437,25 @@ export default function SettingsWindow() {
     }
   };
 
-  const handleStart = async () => {
-    if (!apiKeyInput || apiKeyInput.length < 10) {
-      alert("Lütfen geçerli bir API anahtarı girin.");
-      return;
+  const handleToggleAutoTranslate = async () => {
+    if (!settings.autoTranslateEnabled) {
+      // Going from OFF → ON: validate API key and persist.
+      if (!apiKeyInput || apiKeyInput.length < 10) {
+        alert("Lütfen geçerli bir API anahtarı girin.");
+        return;
+      }
+      await updateSettings({ apiKey: apiKeyInput, autoTranslateEnabled: true });
+      await invoke("set_auto_translate_enabled", { enabled: true });
+      setIsStarting(true);
+      setTimeout(() => {
+        setIsStarting(false);
+        invoke("hide_window", { label: "main" });
+      }, 500);
+    } else {
+      // Going from ON → OFF: just disable, keep window open.
+      await updateSettings({ autoTranslateEnabled: false });
+      await invoke("set_auto_translate_enabled", { enabled: false });
     }
-    await updateSettings({ apiKey: apiKeyInput });
-    setIsStarting(true);
-    setTimeout(() => invoke("hide_window", { label: "main" }), 500);
   };
 
   const filteredHistory =
@@ -465,7 +495,7 @@ export default function SettingsWindow() {
           <span className="text-lg font-semibold">LingoSnap</span>
         </div>
 
-        <div className="mb-6 p-3 rounded-xl bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700/50">
+        <div className="mb-4 p-3 rounded-xl bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700/50">
           <div className="flex items-center gap-2 mb-2">
             <Flame className="h-4 w-4 text-orange-400" />
             <span className="text-sm font-medium">
@@ -475,6 +505,25 @@ export default function SettingsWindow() {
           <p className="text-xs text-zinc-500">
             Bugün {stats.todayTranslations} çeviri yaptın
           </p>
+        </div>
+
+        {/* Auto-translate status badge */}
+        <div
+          className={`mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+            settings.autoTranslateEnabled
+              ? "bg-green-500/10 border border-green-500/30 text-green-300"
+              : "bg-zinc-900/60 border border-zinc-700 text-zinc-400"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${
+              settings.autoTranslateEnabled ? "bg-green-400 animate-pulse" : "bg-zinc-600"
+            }`}
+          />
+          <span className="font-medium">
+            Otomatik çeviri:{" "}
+            {settings.autoTranslateEnabled ? "Çalışıyor" : "Durdu"}
+          </span>
         </div>
 
         <nav className="space-y-1 flex-1">
@@ -531,11 +580,25 @@ export default function SettingsWindow() {
         </div>
 
         <button
-          onClick={handleStart}
+          onClick={handleToggleAutoTranslate}
           disabled={isStarting}
-          className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black hover:bg-zinc-200 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            settings.autoTranslateEnabled
+              ? "bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30"
+              : "bg-white text-black hover:bg-zinc-200"
+          }`}
         >
-          {isStarting ? "Başlatılıyor..." : "Başlat"}
+          {isStarting ? (
+            "Başlatılıyor..."
+          ) : settings.autoTranslateEnabled ? (
+            <>
+              <Pause size={16} /> Durdur
+            </>
+          ) : (
+            <>
+              <Play size={16} /> Başlat
+            </>
+          )}
         </button>
       </div>
 

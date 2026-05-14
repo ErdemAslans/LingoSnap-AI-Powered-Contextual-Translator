@@ -25,6 +25,8 @@ pub fn run() {
             commands::hide_window,
             commands::trigger_translate,
             commands::set_translating_state,
+            commands::set_auto_translate_enabled,
+            commands::get_auto_translate_enabled,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

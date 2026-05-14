@@ -94,3 +94,15 @@ pub fn set_translating_state(translating: bool) -> Result<(), String> {
     mouse_hook::set_translating(translating);
     Ok(())
 }
+
+#[tauri::command]
+pub fn set_auto_translate_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    mouse_hook::set_auto_translate_enabled(enabled);
+    let _ = app.emit("auto-translate-changed", enabled);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_auto_translate_enabled() -> Result<bool, String> {
+    Ok(mouse_hook::is_auto_translate_enabled())
+}
