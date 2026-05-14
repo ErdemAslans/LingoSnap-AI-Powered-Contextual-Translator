@@ -91,9 +91,33 @@ export default function ReviewTab() {
   };
 
   // Called by ReviewCard when user clicks "Check answer".
-  // We do LLM eval here, return rating to UI for display.
+  // For yokdil_mcq we short-circuit the LLM round trip: the correct answer is
+  // already known (expectedAnswer) and the structured analysis (TR translation,
+  // key insight, distractor explanations) was produced at generation time.
   const onCheckAnswer = async (args: { userAnswer: string; timeSpentMs: number }) => {
     if (!currentCard || !currentExercise) throw new Error("No active card");
+
+    if (currentExercise.exerciseType === "yokdil_mcq") {
+      const expected = (currentExercise.expectedAnswer ?? "").trim();
+      const got = args.userAnswer.trim();
+      const correct = got.length > 0 && got.toLowerCase() === expected.toLowerCase();
+      const rating: 1 | 2 | 3 | 4 = correct ? 3 : 1;
+      const feedback = correct
+        ? currentExercise.yokdilKeyInsight ?? "Doğru."
+        : `Yanlış. Doğru cevap: ${expected || "(tanımlanmamış)"}.`;
+
+      setPendingEvalFor({
+        card: currentCard,
+        exercise: currentExercise,
+        userAnswer: args.userAnswer,
+        timeSpentMs: args.timeSpentMs,
+        suggestedRating: rating,
+        feedback,
+        modelAnswer: expected,
+      });
+
+      return { rating, feedback, modelAnswer: expected };
+    }
 
     const evalResult = await evaluateAnswer(settings.apiKey, {
       exerciseType: currentExercise.exerciseType,

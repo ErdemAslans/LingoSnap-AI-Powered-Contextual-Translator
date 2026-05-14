@@ -130,6 +130,52 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
           </div>
         );
 
+      case "yokdil_mcq": {
+        const letters = ["A", "B", "C", "D", "E"];
+        return (
+          <div className="space-y-3">
+            {e.contextSentence && (
+              <p className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3 text-[15px] text-zinc-100 leading-relaxed">
+                {e.contextSentence}
+              </p>
+            )}
+            <div className="space-y-1.5">
+              {(e.options ?? []).map((opt, i) => {
+                const selected = userAnswer === opt;
+                const isCorrect = phase === "feedback" && opt === e.expectedAnswer;
+                const isUserPick = phase === "feedback" && opt === userAnswer;
+                const reveal = phase === "feedback";
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setUserAnswer(opt)}
+                    disabled={phase !== "answering"}
+                    className={`w-full text-left rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                      reveal && isCorrect
+                        ? "border-green-500 bg-green-500/10 text-white"
+                        : reveal && isUserPick && !isCorrect
+                        ? "border-red-500/60 bg-red-500/10 text-white"
+                        : selected
+                        ? "border-blue-500 bg-blue-500/10 text-white"
+                        : "border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:border-zinc-700"
+                    }`}
+                  >
+                    <span className="font-bold text-zinc-400 mr-2">{letters[i]})</span>
+                    {opt}
+                    {reveal && isCorrect && (
+                      <span className="ml-2 text-xs text-green-400">✓ doğru</span>
+                    )}
+                    {reveal && isUserPick && !isCorrect && (
+                      <span className="ml-2 text-xs text-red-400">✗ senin seçimin</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+
       case "cloze_sentence":
       case "context_inference":
         return (
@@ -317,6 +363,49 @@ export default function ReviewCard({ card, exercise, onSubmit, onRated }: Props)
               </div>
             )}
           </div>
+
+          {/* YÖKDİL-style structured analysis (only for yokdil_mcq) */}
+          {exercise.exerciseType === "yokdil_mcq" && (
+            <div className="space-y-2">
+              {exercise.yokdilTranslation && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+                    Türkçe çeviri
+                  </div>
+                  <p className="text-sm text-zinc-200 leading-relaxed">
+                    {exercise.yokdilTranslation}
+                  </p>
+                </div>
+              )}
+
+              {exercise.yokdilKeyInsight && (
+                <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-blue-300 mb-1">
+                    🔑 Anahtar
+                  </div>
+                  <p className="text-sm text-zinc-100 leading-relaxed">
+                    {exercise.yokdilKeyInsight}
+                  </p>
+                </div>
+              )}
+
+              {exercise.yokdilDistractorAnalysis && exercise.yokdilDistractorAnalysis.length > 0 && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">
+                    Diğer şıklar neden yanlış
+                  </div>
+                  <ul className="space-y-1.5 text-xs">
+                    {exercise.yokdilDistractorAnalysis.map((d, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="font-mono text-red-300 shrink-0">{d.option}</span>
+                        <span className="text-zinc-300">— {d.whyWrong}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Rating row */}
           <div className="space-y-1">

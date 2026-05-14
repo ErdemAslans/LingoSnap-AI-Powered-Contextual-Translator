@@ -15,7 +15,8 @@ export type ExerciseType =
   | "use_in_sentence" // write a new EN sentence using the word
   | "listen_and_type" // TTS audio, type what was heard
   | "synonym_or_antonym" // produce a synonym or antonym
-  | "context_inference"; // infer meaning from a never-seen sentence
+  | "context_inference" // infer meaning from a never-seen sentence
+  | "yokdil_mcq"; // YÖKDİL-style 5-option multiple choice with structured analysis
 
 export const EXERCISE_TYPES: ExerciseType[] = [
   "recall_en_to_tr",
@@ -26,6 +27,7 @@ export const EXERCISE_TYPES: ExerciseType[] = [
   "listen_and_type",
   "synonym_or_antonym",
   "context_inference",
+  "yokdil_mcq",
 ];
 
 export interface WordMeaning {
@@ -101,13 +103,18 @@ export interface GeneratedExercise {
   exerciseType: ExerciseType;
   prompt: string; // the question/instruction shown to user
   // Optional fields depending on type:
-  contextSentence?: string; // for cloze, context_inference
+  contextSentence?: string; // for cloze, context_inference, yokdil_mcq
   blank?: string; // the masked token in cloze
-  options?: string[]; // for polysemy_choice / synonym MC
+  options?: string[]; // for polysemy_choice / synonym MC / yokdil_mcq
   expectedAnswer?: string; // free-text expected (may be flexible)
   hint?: string; // hint laddered (used after first wrong attempt)
   ttsText?: string; // text to speak for listen_and_type
   cefrTargetLevel: CefrLevel;
+  // YÖKDİL-style structured analysis, surfaced after the learner rates the card.
+  yokdilFormat?: "single_blank" | "pair" | "conjunction" | "preposition"; // sub-format hint
+  yokdilTranslation?: string; // TR translation of the full context sentence
+  yokdilKeyInsight?: string; // 1-sentence key pedagogical hook
+  yokdilDistractorAnalysis?: Array<{ option: string; whyWrong: string }>;
 }
 
 export interface EvaluationResult {

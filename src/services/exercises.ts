@@ -27,6 +27,7 @@ const MIX_WEIGHTS: Record<ExerciseMix, Record<ExerciseType, number>> = {
     listen_and_type: 1.0,
     synonym_or_antonym: 1.0,
     context_inference: 1.2,
+    yokdil_mcq: 2.0,
   },
   production_heavy: {
     recall_en_to_tr: 0.4,
@@ -37,6 +38,7 @@ const MIX_WEIGHTS: Record<ExerciseMix, Record<ExerciseType, number>> = {
     listen_and_type: 1.0,
     synonym_or_antonym: 1.2,
     context_inference: 1.5,
+    yokdil_mcq: 1.5,
   },
   recognition_heavy: {
     recall_en_to_tr: 2.0,
@@ -47,6 +49,7 @@ const MIX_WEIGHTS: Record<ExerciseMix, Record<ExerciseType, number>> = {
     listen_and_type: 0.5,
     synonym_or_antonym: 0.8,
     context_inference: 1.5,
+    yokdil_mcq: 3.0,
   },
 };
 
@@ -109,6 +112,11 @@ interface ExerciseResponse {
   expectedAnswer?: string;
   hint?: string;
   ttsText?: string;
+  // yokdil_mcq enriched fields
+  yokdilFormat?: "single_blank" | "pair" | "conjunction" | "preposition";
+  yokdilTranslation?: string;
+  yokdilKeyInsight?: string;
+  yokdilDistractorAnalysis?: Array<{ option: string; whyWrong: string }>;
 }
 
 const TYPE_INSTRUCTIONS: Record<ExerciseType, (card: WordCard, cefr: CefrLevel) => string> = {
@@ -171,6 +179,40 @@ Ask the learner what "${card.text}" means in this sentence (Turkish answer).
 Set "expectedAnswer" to a Turkish gloss matching the meaning used.
 Put the English sentence in "contextSentence".
 "prompt" in Turkish.`,
+
+  yokdil_mcq: (card, cefr) => {
+    const pos = (card.partOfSpeech || "").toLowerCase();
+    let formatHint: string;
+    if (pos.includes("preposition") || pos === "prep") {
+      formatHint = `Format: "preposition" — write a NEW academic English sentence with TWO blanks, both prepositions. The TARGET "${card.text}" fills one of them; the other is a different common preposition you choose. Each of the 5 options is a PAIR like "into / with", "off / on".`;
+    } else if (pos.includes("conjunction") || pos.includes("connector")) {
+      formatHint = `Format: "conjunction" — write a NEW academic English sentence where the blank is a single conjunction/connector. The TARGET "${card.text}" is the correct option. Distractors should be plausible competing connectors (e.g., While, Because, As though, In order that, Just as).`;
+    } else if (card.kind === "phrase" && card.text.split(/\s+/).length >= 2) {
+      formatHint = `Format: "single_blank" — write a NEW academic English sentence at CEFR ${cefr}. The blank ("----") is replaced by a PHRASE; the TARGET "${card.text}" is the correct option. Distractors must be plausible competing phrases (same register, similar pattern) but contextually wrong.`;
+    } else {
+      formatHint = `Format: "single_blank" — write a NEW academic English sentence at CEFR ${cefr} of 25-45 words. The blank ("----") falls where a single content word goes; the TARGET "${card.text}" is the correct option. Distractors are 4 OTHER words of the same part of speech (${pos || "same POS"}), similar register, related but contextually wrong.`;
+    }
+
+    return `Type: yokdil_mcq (YÖKDİL-style 5-option multiple choice, academic register).
+${formatHint}
+
+REQUIREMENTS:
+- contextSentence: the FULL sentence with "----" marking the blank. Tone: academic / encyclopedic / scientific.
+- options: exactly 5 entries (A=options[0] … E=options[4]). The correct option MUST be one of them.
+- expectedAnswer: the correct option, character-identical to its entry in options.
+- yokdilFormat: "single_blank" | "pair" | "conjunction" | "preposition".
+- yokdilTranslation: the FULL English sentence translated to natural Turkish (target word translated correctly).
+- yokdilKeyInsight: ONE Turkish sentence naming the linguistic key (collocation / register cue / contrast cue / pos cue). No empty praise.
+- yokdilDistractorAnalysis: array of 4 entries, one per wrong option, each {option: "...", whyWrong: "kısa Türkçe gerekçe"}.
+- prompt: short Turkish instruction (e.g., "Boşluğa en uygun seçeneği işaretle.").
+
+Distractor design (critical):
+- Same part of speech and similar morphology to the correct word.
+- Plausible at first glance.
+- Refutable by ONE strong cue in the sentence (register, collocation, positive/negative polarity, parallelism). Name that cue in distractor analysis.
+
+JSON only.`;
+  },
 };
 
 export async function generateExercise(
@@ -224,5 +266,9 @@ Rules:
     hint: parsed.hint,
     ttsText: parsed.ttsText,
     cefrTargetLevel: cefrLevel,
+    yokdilFormat: parsed.yokdilFormat,
+    yokdilTranslation: parsed.yokdilTranslation,
+    yokdilKeyInsight: parsed.yokdilKeyInsight,
+    yokdilDistractorAnalysis: parsed.yokdilDistractorAnalysis,
   };
 }
